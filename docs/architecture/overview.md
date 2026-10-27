@@ -5,14 +5,14 @@
 ```
 klient AI --OIDC--> MCP gateway --mTLS + JWT C2 + poświadczenie C3--> mcp-servicedesk --API--> system servicedesk
                        |  ^
-                       |  +-- credential broker (poświadczenie użytkownika)
+                       |  +-- credential broker (poświadczenie: konto serwisowe albo token użytkownika)
                        +-- polityki (Cedar), potwierdzenia, audyt
 ```
 
 Gateway uwierzytelnia użytkownika, decyduje o dostępie do narzędzia, pobiera z brokera poświadczenie
-użytkownika do systemu i wysyła do serwera nowy wewnętrzny JWT na każde żądanie HTTP. Serwer sprawdza, że
+do systemu (dla service desku domyślnie konto serwisowe, D10) i wysyła do serwera nowy wewnętrzny JWT na każde żądanie HTTP. Serwer sprawdza, że
 żądanie przyszło od gateway'a (certyfikat klienta CN `mcp-gateway`, JWT z `aud` = `mcp-servicedesk`, `tool` ==
-nazwa wywoływanego narzędzia, jednorazowy `jti`), i woła system jako ten użytkownik. Serwer nie zna tokenu
+nazwa wywoływanego narzędzia, jednorazowy `jti`), i woła system z tym poświadczeniem; przy koncie serwisowym sam pilnuje dozwolonych kolejek. Serwer nie zna tokenu
 IdP użytkownika i nie przechowuje żadnego sekretu.
 
 ## Heksagon w modułach

@@ -1,7 +1,7 @@
 # Jak napisać narzędzie
 
 Narzędzie to metoda `@Tool` wołana przez model przez gateway. Każdy argument jest niezaufany, a wynik trafia
-do modelu, który może go potraktować jak instrukcję. Wzorcem jest `get_record`.
+do modelu, który może go potraktować jak instrukcję. Wzorcem jest `get_ticket`.
 
 ## Kroki, od środka
 
@@ -44,7 +44,7 @@ do modelu, który może go potraktować jak instrukcję. Wzorcem jest `get_recor
   zatwierdzenia w gateway'u (C6).
 - Wynik minimalny. Tylko pola potrzebne do zadania, bez surowego HTML; tekst z systemu to dane, nie
   polecenia.
-- Bez sekretów. Serwer nie ma własnego konta w systemie; nie loguj i nie zwracaj poświadczenia (starter
+- Bez sekretów. Serwer nie trzyma żadnego poświadczenia (konto serwisowe service desku też przychodzi z C3); nie loguj i nie zwracaj poświadczenia (starter
   usuwa je z komunikatów, ale nie licz na to w kodzie).
 
 ## Do dopisania po starterze beta
