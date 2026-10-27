@@ -38,6 +38,39 @@ servicedesk:
     ssl-bundle: ${MCP_SERVICEDESK_SSL_BUNDLE:}
     connect-timeout: 2s
     read-timeout: 10s
+  access:
+    # service-account (D10): the service desk does not know the user, so the server serves only the queues
+    # listed below and refuses everything when the list is empty. user-secret: the user's own token decides,
+    # a non-empty list narrows it further.
+    credential-mode: ${MCP_SERVICEDESK_CREDENTIAL_MODE:service-account}
+    allowed-queues: ${MCP_SERVICEDESK_ALLOWED_QUEUES:}
+  # Reference REST layout of the generic adapter (D10, product not chosen). For a concrete product, override
+  # this block from a file given in --spring.config.additional-location (README, "Adapter REST").
+  api:
+    credential-header: Authorization
+    ticket-path: /api/v1/tickets/{ticketId}
+    search:
+      path: /api/v1/queues/{queue}/tickets
+      text-param: q
+      limit-param: limit
+      results-pointer: /items
+    note:
+      path: /api/v1/tickets/{ticketId}/notes
+      method: POST
+      body-pointer: /body
+      static-fields:
+        - pointer: /visibility
+          value: '"internal"'
+      id-pointer: /id
+    fields:
+      id: /id
+      queue: /queue
+      subject: /subject
+      status: /status
+      priority: /priority
+      created: /createdAt
+      updated: /updatedAt
+      description: /description
 
 management:
   endpoints:
