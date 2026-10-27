@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import pl.aiwcorpo.mcp.platform.security.BackendCredential;
 
 /**
  * With the service account the service desk shows everything, so the server is the access boundary
@@ -79,7 +80,7 @@ class QueueBoundaryTest extends ServerTestSupport {
 
     @Test
     void aUserCredentialDoesNotWidenTheServiceAccountMode() {
-        try (McpSyncClient client = clientWithCredential("Bearer user-token-of-jkowalski", USER_SECRET)) {
+        try (McpSyncClient client = clientWithCredential("Bearer user-token-of-jkowalski", BackendCredential.Type.USER_SECRET)) {
             assertNotFoundOrDenied(call(client, "get_ticket", Map.of("ticketId", "FIN-7")));
             assertNotFoundOrDenied(call(client, "search_tickets", Map.of("queue", "FIN", "text", "x")));
         }

@@ -167,8 +167,13 @@ public final class ServicedeskApi {
         for (ServicedeskApiProperties.StaticField field : fields == null
                 ? List.<ServicedeskApiProperties.StaticField>of() : fields) {
             String pointer = require(field.pointer(), POINTER, "servicedesk.api.note.static-fields[].pointer");
-            if (pointer.equals(noteBodyPointer)) {
+            if (overlaps(pointer, noteBodyPointer)) {
                 throw invalid("servicedesk.api.note.static-fields must not overwrite the note body pointer");
+            }
+            for (String other : result.keySet()) {
+                if (overlaps(pointer, other)) {
+                    throw invalid("servicedesk.api.note.static-fields pointers must not overlap: " + pointer);
+                }
             }
             if (blank(field.value())) {
                 throw invalid("servicedesk.api.note.static-fields[].value must be a JSON literal");
@@ -182,6 +187,11 @@ public final class ServicedeskApi {
             result.put(pointer, value);
         }
         return Map.copyOf(result);
+    }
+
+    /** Equal pointers, or one inside the other: the later {@code put} would silently replace the earlier value. */
+    private static boolean overlaps(String a, String b) {
+        return a.equals(b) || a.startsWith(b + "/") || b.startsWith(a + "/");
     }
 
     private static HttpMethod noteMethod(String method) {

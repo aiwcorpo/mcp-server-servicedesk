@@ -7,6 +7,7 @@ import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.context.TestPropertySource;
+import pl.aiwcorpo.mcp.platform.security.BackendCredential;
 
 /**
  * {@code user-secret} mode without a queue list: the user's own token decides what the service desk shows. A
@@ -24,17 +25,19 @@ class UserSecretModeTest extends ServerTestSupport {
 
     @Test
     void theUsersTokenReachesAnyQueueTheServiceDeskShowsIt() {
-        try (McpSyncClient client = clientWithCredential(USER_TOKEN, USER_SECRET)) {
+        try (McpSyncClient client = clientWithCredential(USER_TOKEN, BackendCredential.Type.USER_SECRET)) {
             assertThat(text(call(client, "get_ticket", Map.of("ticketId", "FIN-7")))).contains("\"queue\":\"FIN\"");
             assertThat(text(call(client, "search_tickets", Map.of("queue", "FIN", "text", "x")))).contains("FIN-7");
             assertThat(call(client, "add_note", Map.of("ticketId", "FIN-7", "body", "x")).isError()).isFalse();
         }
         assertThat(BACKEND.authorizations()).containsOnly(USER_TOKEN);
+        assertThat(BACKEND.noteBodies()).as("the user's own token makes the user the author").singleElement()
+                .asString().doesNotContain("on behalf of");
     }
 
     @Test
     void hiddenTicketsStillLookLikeMissingOnes() {
-        try (McpSyncClient client = clientWithCredential(USER_TOKEN, USER_SECRET)) {
+        try (McpSyncClient client = clientWithCredential(USER_TOKEN, BackendCredential.Type.USER_SECRET)) {
             assertNotFoundOrDenied(call(client, "get_ticket", Map.of("ticketId", "IT-403")));
             assertNotFoundOrDenied(call(client, "get_ticket", Map.of("ticketId", "ALIAS-1")));
             assertNotFoundOrDenied(call(client, "get_ticket", Map.of("ticketId", "NOQ-1")));

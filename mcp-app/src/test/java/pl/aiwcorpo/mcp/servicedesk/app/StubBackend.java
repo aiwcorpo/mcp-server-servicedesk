@@ -15,6 +15,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -26,35 +27,52 @@ import java.util.concurrent.atomic.AtomicInteger;
  * in FIN, {@code MOVED-3} in IT until {@link #move} puts it elsewhere. Special answers: {@code IT-403} 403,
  * {@code IT-500} 500 echoing the caller's credential, {@code ALIAS-1} answers with ticket IT-1 (alias or merge),
  * {@code NOQ-1} has no queue, notes on {@code IT-2} are 403, notes on {@code IT-NOTE401} are 401. Search lists
- * the tickets indexed under a queue, reporting each one's current queue: FIN-7 is also indexed under IT
- * (cross-queue match) and MOVED-3 stays indexed under IT after a move (stale index). Queue GONE answers 404.
+ * the tickets indexed under a queue, reporting each one's current queue: FIN-7 (not allowed) and OPS-5 (allowed)
+ * are also indexed under IT (cross-queue match) and MOVED-3 stays indexed under IT after a move (stale index).
+ * Queue GONE answers 404. Unusable answers: {@code IT-BADJSON} is 200 with a body that is not JSON and carries
+ * {@link #BODY_MARKER}, {@code IT-302} redirects to a second server that records whether anything followed,
+ * {@code IT-SLOW} answers after {@link #SLOW_MILLIS}, {@code IT-HUGE} is {@link #HUGE_BYTES} long.
  * Requests without a credential or with {@link #EXPIRED_CREDENTIAL} get 401.
  */
 final class StubBackend {
 
     static final String EXPIRED_CREDENTIAL = "ApiKey expired-service-key";
+    static final String BODY_MARKER = "SECRETBODYTOKEN123";
+    static final long SLOW_MILLIS = 4_000;
+    static final int HUGE_BYTES = 256 * 1024;
 
     private record StubTicket(String id, String queue, Set<String> indexedUnder) {
     }
 
     private final HttpServer server;
+    private final HttpServer elsewhere;
+    private final List<String> elsewhereHits = new CopyOnWriteArrayList<>();
     private final List<String> requests = new CopyOnWriteArrayList<>();
     private final List<String> authorizations = new CopyOnWriteArrayList<>();
     private final List<String> noteBodies = new CopyOnWriteArrayList<>();
     private final Map<String, StubTicket> tickets = new ConcurrentHashMap<>();
     private final AtomicInteger noteIds = new AtomicInteger();
 
-    private StubBackend(HttpServer server) {
+    private StubBackend(HttpServer server, HttpServer elsewhere) {
         this.server = server;
+        this.elsewhere = elsewhere;
         reset();
     }
 
     static StubBackend start() {
         try {
             HttpServer server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
-            StubBackend backend = new StubBackend(server);
+            HttpServer elsewhere = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
+            StubBackend backend = new StubBackend(server, elsewhere);
             server.createContext("/api/v1/", backend::handle);
+            elsewhere.createContext("/", exchange -> {
+                backend.elsewhereHits.add(String.valueOf(exchange.getRequestHeaders().getFirst("Authorization")));
+                respond(exchange, 200, ticketJson(new StubTicket("IT-302", "IT", Set.of())));
+            });
+            // The slow ticket must not hold up the requests of the next test.
+            server.setExecutor(Executors.newCachedThreadPool());
             server.start();
+            elsewhere.start();
             return backend;
         } catch (IOException ex) {
             throw new UncheckedIOException(ex);
@@ -63,6 +81,11 @@ final class StubBackend {
 
     String baseUrl() {
         return "http://127.0.0.1:" + server.getAddress().getPort();
+    }
+
+    /** Authorization headers that reached the redirect target. */
+    List<String> elsewhereHits() {
+        return List.copyOf(elsewhereHits);
     }
 
     /** {@code METHOD path?query} of every request so far. */
@@ -86,6 +109,7 @@ final class StubBackend {
     void reset() {
         requests.clear();
         authorizations.clear();
+        elsewhereHits.clear();
         noteBodies.clear();
         noteIds.set(0);
         tickets.clear();
@@ -93,7 +117,7 @@ final class StubBackend {
                 new StubTicket("IT-1", "IT", Set.of("IT")),
                 new StubTicket("IT-2", "IT", Set.of("IT")),
                 new StubTicket("IT-NOTE401", "IT", Set.of()),
-                new StubTicket("OPS-5", "OPS", Set.of("OPS")),
+                new StubTicket("OPS-5", "OPS", Set.of("OPS", "IT")),
                 new StubTicket("FIN-7", "FIN", Set.of("FIN", "IT")),
                 new StubTicket("MOVED-3", "IT", Set.of("IT")))) {
             tickets.put(ticket.id(), ticket);
@@ -130,6 +154,19 @@ final class StubBackend {
             case "IT-403" -> respond(exchange, 403, "{\"message\":\"forbidden\"}");
             case "IT-500" -> respond(exchange, 500, "{\"error\":\"boom\",\"seen\":\"" + authorization + "\"}");
             case "ALIAS-1" -> respond(exchange, 200, ticketJson(tickets.get("IT-1")));
+            case "IT-BADJSON" -> respond(exchange, 200, "<html>" + BODY_MARKER + " login</html>");
+            case "IT-302" -> {
+                exchange.getResponseHeaders().set("Location",
+                        "http://127.0.0.1:" + elsewhere.getAddress().getPort() + "/api/v1/tickets/IT-302");
+                exchange.sendResponseHeaders(302, -1);
+                exchange.close();
+            }
+            case "IT-SLOW" -> {
+                sleep();
+                respond(exchange, 200, ticketJson(new StubTicket("IT-SLOW", "IT", Set.of())));
+            }
+            case "IT-HUGE" -> respond(exchange, 200,
+                    "{\"id\":\"IT-HUGE\",\"queue\":\"IT\",\"description\":\"" + "x".repeat(HUGE_BYTES) + "\"}");
             case "NOQ-1" -> respond(exchange, 200, "{\"id\":\"NOQ-1\",\"subject\":\"No queue\",\"status\":\"open\"}");
             default -> {
                 StubTicket ticket = tickets.get(id);
@@ -171,6 +208,14 @@ final class StubBackend {
             }
         }
         respond(exchange, 200, "{\"items\":[" + String.join(",", items) + "],\"total\":" + items.size() + "}");
+    }
+
+    private static void sleep() {
+        try {
+            Thread.sleep(SLOW_MILLIS);
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     private static String param(String query, String name) {

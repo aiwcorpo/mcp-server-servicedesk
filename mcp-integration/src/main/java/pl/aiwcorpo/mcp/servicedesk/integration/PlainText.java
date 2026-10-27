@@ -1,15 +1,17 @@
 package pl.aiwcorpo.mcp.servicedesk.integration;
 
 import java.util.regex.Pattern;
+import pl.aiwcorpo.mcp.servicedesk.core.domain.Ticket;
 
 /**
  * Service desk text as plain text: descriptions are often HTML from a rich-text editor, and markup is neither
- * needed by the model nor safe to pass on. Tags are dropped (script and style with their content), the common
- * entities decoded, control characters removed and the length capped.
+ * needed by the model nor safe to pass on. The common entities are decoded first and the tags dropped after
+ * (script and style with their content), so an escaped tag cannot come out as markup; control characters are
+ * removed and the length capped. What is left is text in which {@code <} and {@code &} are ordinary characters.
  */
 final class PlainText {
 
-    static final String CUT_MARK = " ...[cut]";
+    static final String CUT_MARK = Ticket.TEXT_CUT_MARK;
 
     private static final Pattern DROPPED_BLOCKS =
             Pattern.compile("(?is)<(script|style)\\b[^>]*>.*?</\\1\\s*>|<!--.*?-->");
@@ -29,19 +31,10 @@ final class PlainText {
             return null;
         }
         String text = raw.replace("\r\n", "\n").replace('\r', '\n');
-        if (text.indexOf('<') >= 0) {
-            text = DROPPED_BLOCKS.matcher(text).replaceAll("");
-            text = LINE_BREAK_TAGS.matcher(text).replaceAll("\n");
-            text = TAG.matcher(text).replaceAll("");
-            // A lone '<' that never closes would hide the rest of a tag from TAG; drop what is left of it.
-            int open = text.indexOf('<');
-            if (open >= 0 && text.indexOf('>', open) < 0) {
-                text = text.substring(0, open);
-            }
-        }
         if (text.indexOf('&') >= 0) {
             text = decodeEntities(text);
         }
+        text = stripMarkup(text);
         text = CONTROL.matcher(text).replaceAll("");
         text = SPACES.matcher(text).replaceAll(" ");
         text = BLANK_LINES.matcher(text).replaceAll("\n\n").strip();
@@ -49,6 +42,25 @@ final class PlainText {
             text = text.substring(0, max - CUT_MARK.length()) + CUT_MARK;
         }
         return text;
+    }
+
+    /**
+     * Repeated until nothing changes: removing a tag can join the characters around it into a new one
+     * ({@code <<b>script>}).
+     */
+    private static String stripMarkup(String text) {
+        String previous;
+        do {
+            previous = text;
+            if (text.indexOf('<') >= 0) {
+                text = DROPPED_BLOCKS.matcher(text).replaceAll("");
+                text = LINE_BREAK_TAGS.matcher(text).replaceAll("\n");
+                text = TAG.matcher(text).replaceAll("");
+            }
+        } while (!text.equals(previous));
+        // A lone '<' that never closes would hide the rest of a tag from TAG; drop what is left of it.
+        int open = text.indexOf('<');
+        return open >= 0 && text.indexOf('>', open) < 0 ? text.substring(0, open) : text;
     }
 
     private static String decodeEntities(String text) {

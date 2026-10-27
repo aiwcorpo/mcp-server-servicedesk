@@ -1,10 +1,32 @@
 # STATUS - mcp-server-servicedesk (ws-04)
 
-M1: osiągnięty (2026-10-27) - `search_tickets`, `get_ticket`, `add_note` na generycznym adapterze REST (D10) i starterze 3.0.0-alpha-5; konto serwisowe fail-closed (tylko kolejki z konfiguracji, pusta lista = odmowa), 66 testów na stubie.
+M1: osiągnięty (2026-10-27, runda 2 na starterze 3.0.0-alpha-6) - `search_tickets`, `get_ticket`, `add_note` na generycznym adapterze REST (D10); konto serwisowe fail-closed (tylko kolejki z konfiguracji, pusta lista = odmowa), notatki z autorem zlecenia, walidacja argumentów w starterze (C10 + C8), zmiany template'u od 7f65f8f przeniesione, 79 testów na stubie.
 
 Start: wygenerowany z `mcp-server-template` 7f65f8f (`./new-server.sh servicedesk`), pierwszy commit to stan
-bez zmian. Starter: BOM `pl.aiwcorpo.mcp:mcp-platform-bom:3.0.0-alpha-5` (kontrakty 2.0.2). M2 nie jest
+bez zmian. Starter: BOM `pl.aiwcorpo.mcp:mcp-platform-bom:3.0.0-alpha-6` (kontrakty 2.0.2). M2 nie jest
 zaczęty.
+
+## Runda 2: znalezisko -> status
+
+| Znalezisko | Status |
+| --- | --- |
+| alpha-6: walidacja argumentów w starterze, brak własnych obejść SDK | zrobione: serwer nie ma customizera MCP; `ServerTestSupport.assertInvalidArgument` wymaga C10 `invalid_argument` i odrzuca tekst SDK `input validation failed`; `GATEWAY.asGateway(user, credential, Type)` zamiast nadpisywania nagłówka |
+| alpha-6: `@ArgumentLimits` + `SchemaLimitedToolCallbacks`, `contractPattern` | nie zastosowane świadomie (decyzja koordynatora): ręczne schematy zostają, bo są zamknięte (`type: object`, `additionalProperties: false`). Wzorce nadal pochodzą z kopii w `Identifiers`; przejście na `@Tool` + `contractPattern` usunie kopię, gdy będzie potrzebne |
+| S-H1 (nazwa argumentu wstrzykuje linię audytu) | zamknięte starterem alpha-6; test serwera `GetTicketToolTest.anArgumentNameCannotForgeAnAuditLine`: `invalid_argument`, zdarzenie C8, żadnej linii zaczynającej się od sfałszowanego JSON w stdout |
+| S-M1 (HTML po dekodowaniu encji) | poprawione: `PlainText` dekoduje encje przed usunięciem znaczników i powtarza usuwanie do skutku; test, który oczekiwał `<script>`, zmieniony; nowe testy kodowanych tagów, `<<b>script>` i braku tagu w wyniku |
+| S-M2 (notatka konta serwisowego bez autora) | poprawione: przy `service-account` treść zaczyna się od `[Added through the MCP platform on behalf of <usr>]`, nazwa z `CallerContext` (bez argumentów, tylko `A-Za-z0-9._@-`, inaczej `unknown`); README "Autor notatki przy koncie serwisowym"; test w `AddNoteToolTest`, brak prefiksu w `UserSecretModeTest` |
+| S-L1 (TOCTOU odczyt -> zapis) | zostaje, opis w "Odstępstwa" |
+| S-L2 (mutacja `hit.queue().equals(queue)`) | test `ServicedeskServiceTest.searchDropsHitsOfAnotherAllowedQueueToo` (mutacja zabita) i trafienie `OPS-5` indeksowane też pod `IT` w stubie |
+| S-L3 (pola stałe notatki) | częściowo: pointery pól stałych nie mogą się pokrywać ani zawierać (z treścią notatki i między sobą), test; wymóg co najmniej jednego pola stałego w trybie `service-account` nie zrobiony (zmienia kontrakt konfiguracji, do decyzji przy wyborze produktu) |
+| S-L4 i wspólne: `http` poza dev, brak limitu rozmiaru | poprawione zmianami template'u: `https` poza `dev` (`MCP_SERVICEDESK_ALLOW_PLAIN_HTTP`), limit 1 MB, 3xx jako błąd |
+| CC-072 `UntrustedText` | zastosowane dla `subject` i `description`: `{kind, format: "text/plain", text, truncated}`; status, priorytet i daty zostają zwykłymi polami (krótkie, do 64 znaków, bez znaków sterujących) |
+| CC-076 (servicedesk fail-closed) | już tak jest |
+| Template od 7f65f8f | przeniesione: pom, `application.yml` (limit, `allow-plain-http`, tylko `health`), `application-dev.yml`, `BackendResponseException`, `BoundedBodyInterceptor`, kolejność `catch` w adapterze, systemd, `install.sh`, `ProductionConfigurationTest`, `DevProfileLoopbackTest`, stub z rekordami BADJSON/302/SLOW/HUGE, README (uruchomienie lokalne i mTLS), SECURITY.md, `jak-napisac-narzedzie.md` |
+
+Weryfikacja: `./mvnw -B clean verify` (JDK 25) -> 79 testów, 0 błędów. Uruchomienie wg README: profil `dev` na
+18530 (health 200, `POST /mcp` bez JWT 401, `/actuator/prometheus` bez dostępu), konfiguracja bazowa z mTLS
+`mcp-platform-dev` na 18530 (health po mTLS z certyfikatem gateway'a 200, `POST /mcp` bez JWT 401, bez
+certyfikatu klienta handshake zerwany, ostrzeżenie `backend_plain_http` przy jawnej zgodzie). Procesy zatrzymane.
 
 ## Co działa
 
@@ -19,7 +41,7 @@ zaczęty.
   z ręcznym `inputSchema` (`ServicedeskToolSchemas`: `additionalProperties: false`, wzorce
   `ServiceDeskQueueId`/`ServiceDeskTicketId` z kontraktu, `minLength`/`maxLength`). Te same limity sprawdza
   narzędzie (`InvalidToolArgumentException`), bo klient może pominąć schemat.
-- Treść z systemu (temat, opis) w osobnym obiekcie `untrustedText`, bez HTML, skryptów i znaków sterujących.
+- Treść z systemu (temat, opis) jako `UntrustedText` (CC-072), bez HTML, skryptów i znaków sterujących; encje dekodowane przed usunięciem znaczników.
 - Granica kolejek (`QueueAccessPolicy`): tryb `service-account` (domyślny) albo `user-secret`, lista
   `MCP_SERVICEDESK_ALLOWED_QUEUES`. Konto serwisowe obsługuje tylko kolejki z listy, pusta lista = każde
   wywołanie `not_found_or_denied` bez wołania systemu (WARN `event=no_allowed_queues` przy starcie).
@@ -34,12 +56,13 @@ zaczęty.
   `X-API-Key` z samą wartością), metoda notatki POST/PUT/PATCH, JSON pointery pól, treści notatki i id notatki.
   Konfiguracja walidowana przy starcie (zła = brak startu). URI przez `UriComponentsBuilder.encode()` + zmienne,
   więc tekst z `&`, `#`, `/`, `+` nie zmienia ścieżki ani parametrów (test).
-- Testy: `./mvnw verify` (JDK 25, bez Dockera) -> 66 testów, 0 błędów: core 6, application 7, integration 14,
-  tools 3, app 36 (`SearchTicketsToolTest` 7, `GetTicketToolTest` 7, `AddNoteToolTest` 7, `QueueBoundaryTest` 5,
-  `UserSecretModeTest` 3, `ToolDefinitionsTest` 3, `GatewayOnlyAccessTest` 3, `NoAllowedQueuesTest` 1).
-  Testy autoryzacji: zgłoszenie z innej kolejki, przeniesione z dozwolonej do niedozwolonej (odczyt, notatka,
-  wyszukiwanie z nieaktualnym indeksem), przeniesione do dozwolonej, alias, bez kolejki, nieistniejące, 403,
-  wariant wielkości liter kolejki, token użytkownika w trybie konta serwisowego, pusta lista.
+- Testy: `./mvnw verify` (JDK 25, bez Dockera) -> 79 testów, 0 błędów: core 6, application 8, integration 16,
+  tools 4, app 45 (`SearchTicketsToolTest` 7, `GetTicketToolTest` 12, `AddNoteToolTest` 7, `QueueBoundaryTest` 5,
+  `UserSecretModeTest` 3, `ToolDefinitionsTest` 3, `GatewayOnlyAccessTest` 3, `ProductionConfigurationTest` 3,
+  `NoAllowedQueuesTest` 1, `DevProfileLoopbackTest` 1). Testy autoryzacji: zgłoszenie z innej kolejki,
+  przeniesione z dozwolonej do niedozwolonej (odczyt, notatka, wyszukiwanie z nieaktualnym indeksem),
+  przeniesione do dozwolonej, alias, bez kolejki, nieistniejące, 403, wariant wielkości liter kolejki, token
+  użytkownika w trybie konta serwisowego, pusta lista.
 - Smoke konfiguracji produkcyjnej na hoście (port 18530, certyfikat i użytkownik Redisa `mcp-servicedesk` z
   `mcp-platform-dev`, Redis 16379): start, `/actuator/health` po mTLS z certyfikatem gateway'a 200, `POST /mcp`
   bez JWT 401, bez certyfikatu klienta handshake zerwany. Proces zatrzymany.
@@ -56,21 +79,13 @@ systemu); resolver obok adaptera w mcp-integration.
 
 ## Odstępstwa
 
-- Argumenty łamiące `inputSchema` (wzorzec, długość, brak pola, pole nadmiarowe) odrzuca walidacja schematu w
-  MCP SDK 2.0 (`ToolInputValidator`) przed narzędziem: tekst `Tool (x) input validation failed: ...` zamiast C10
-  `invalid_argument` i bez zdarzenia C8 `tool_call`. Wartości argumentu w tekście nie ma (testy). Walidacja w
-  narzędziu (C10) zostaje i działa dla reszty (pusty tekst, znaki sterujące) oraz bez schematu
-  (`ServicedeskToolTest`). Wyłączenie walidacji SDK wymagałoby własnego `McpSyncServerCustomizer`, który
-  zastępuje customizer Spring AI z `immediateExecution(true)` (pułapka opisana w `CredentialTransportGuard`),
-  więc tego nie robię. Do ws-02.
 - Stuby zamiast mocka z ws-01: brief chce testów na mockach ws-01, mocka service desku nie ma. `StubBackend`
   odpowiada w układzie referencyjnym adaptera, nie w API konkretnego produktu (produktu nie wybrano, D10);
   `TicketJsonTest` pokazuje drugi, zagnieżdżony kształt (numery jako liczby).
-- Kształt oznaczenia danych (`untrustedText{subject, description}`) jest własny; jest otwarte CC od
-  mcp-confluence (`UntrustedText` z `kind: "untrusted-data"`). Po decyzji przejdę na wspólny kształt.
-- Wynik zapisu notatki: odczyt i zapis to dwa wywołania systemu; zgłoszenie przeniesione między nimi dostanie
-  notatkę (okno TOCTOU). Generyczne REST nie daje warunkowego zapisu; przy wyborze produktu: `If-Match`/ETag albo
-  zapis przez endpoint kolejki, jeśli produkt go ma.
+- Wynik zapisu notatki (S-L1): odczyt i zapis to dwa wywołania systemu; zgłoszenie przeniesione między nimi dostanie
+  notatkę (okno TOCTOU), a po zapisie nie ma ponownego odczytu z alarmem przy zmianie kolejki. Generyczne REST nie
+  daje warunkowego zapisu; przy wyborze produktu: `If-Match`/ETag albo zapis przez endpoint kolejki.
+- Status, priorytet i daty w wyniku to zwykłe pola (do 64 znaków, bez znaków sterujących), nie `UntrustedText`.
 - Limity w opisach narzędzi są stałe (20 trafień), bo opis wchodzi do `definitionHash`.
 - Tekst wyszukiwania idzie jako wartość parametru; jeśli wybrany produkt traktuje ten parametr jako język
   zapytań (np. JQL/AQL), adapter musi dostać escapowanie właściwe dla produktu. Do sprawdzenia przy D10.
@@ -78,6 +93,8 @@ systemu); resolver obok adaptera w mcp-integration.
 
 ## Czego potrzebuje ws-01
 
+- Usługa `mcp-servicedesk` w compose potrzebuje `MCP_SERVICEDESK_ALLOW_PLAIN_HTTP: "true"`, dopóki mock jest po
+  `http` (poza `dev` serwer przyjmuje tylko `https`).
 - Mocka service desku w `mcp-platform-dev` nie ma. Propozycja: WireMock w układzie referencyjnym z
   `application.yml` (`/api/v1/tickets/{id}`, `/api/v1/queues/{queue}/tickets?q=&limit=`,
   `POST /api/v1/tickets/{id}/notes`), klucz API konta serwisowego sprawdzany jak PAT w mocku Jiry, dane: kolejki
@@ -89,20 +106,15 @@ systemu); resolver obok adaptera w mcp-integration.
 
 ## Czego potrzebuje ws-02
 
-1. Walidacja `inputSchema` w MCP SDK odpowiada przed `AuditingToolCallback`: błąd nie jest w formacie C10 i
-   nie ma zdarzenia C8. Propozycja: starter dostarcza `JsonSchemaValidator`/ustawienie, które przepuszcza do
-   narzędzia, a walidację schematu robi w `AuditingToolCallback` z wynikiem `invalid_argument` i audytem; albo
-   bezpieczny sposób wyłączenia (`validateToolInputs(false)`) bez nadpisywania customizera Spring AI.
-2. `TestGateway.asGateway` zawsze ustawia `X-MCP-Credential-Type: user-secret`; serwer z kontem serwisowym
-   nadpisuje nagłówek w kliencie testowym (`ServerTestSupport.clientWithCredential`). Propozycja: parametr typu
-   poświadczenia.
-3. Brak sposobu na `inputSchema` z limitami przy `@Tool`; serwer buduje `MethodToolCallback` ręcznie
-   (`McpToolsConfiguration.callbacks`). Wzorzec do przeniesienia do startera/template'u.
+Nic blokującego. Z listy po alpha-5 zamknięte w alpha-6: walidacja `inputSchema` w starterze (C10 + C8), parametr
+typu poświadczenia w `TestGateway.asGateway`, `@ArgumentLimits` ze startera. Do rozważenia: `SchemaLimitedToolCallbacks`
+mogłoby przyjmować gotowy `inputSchema` (ręczne schematy servicedesku nie przechodzą przez adnotacje), bo przy
+`contractPattern` serwer i tak nie kopiowałby wzorców.
 
 ## Czego potrzebuje ws-03
 
-- Template generuje schematy bez `pattern`/`maxLength`; po wzorcu z tego serwera (ręczne schematy) trzeba też
-  opisać w `docs/jak-napisac-narzedzie.md`, że błędy schematu odpowiadają z SDK, nie z C10.
+- Template generuje `ArgumentLimits` i `SchemaLimitedToolCallbacks` w `mcp-tools`; od alpha-6 są w starterze
+  (`pl.aiwcorpo.mcp.platform.input`), więc template powinien je stamtąd brać. Servicedesk ich nie używa (ręczne schematy).
 
 ## Czego potrzebuje ws-05 / ws-09
 

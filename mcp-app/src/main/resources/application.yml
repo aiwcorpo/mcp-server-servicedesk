@@ -38,6 +38,9 @@ servicedesk:
     ssl-bundle: ${MCP_SERVICEDESK_SSL_BUNDLE:}
     connect-timeout: 2s
     read-timeout: 10s
+    max-response-size: 1MB
+    # Plain http outside 'dev' only for the mocks of mcp-platform-dev; never in a real deployment.
+    allow-plain-http: ${MCP_SERVICEDESK_ALLOW_PLAIN_HTTP:false}
   access:
     # service-account (D10): the service desk does not know the user, so the server serves only the queues
     # listed below and refuses everything when the list is empty. user-secret: the user's own token decides,
@@ -76,7 +79,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,prometheus
+        include: health
   endpoint:
     health:
       probes:

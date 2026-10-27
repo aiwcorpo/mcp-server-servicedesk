@@ -20,6 +20,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.TestPropertySource;
+import pl.aiwcorpo.mcp.platform.security.BackendCredential;
 import pl.aiwcorpo.mcp.platform.test.TestGateway;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -36,8 +37,7 @@ abstract class ServerTestSupport {
 
     /** The platform's service account for the service desk, as the gateway injects it (C3). */
     static final String SERVICE_KEY = "ApiKey sd-service-key-7f3a91";
-    static final String SERVICE_ACCOUNT = "service-account";
-    static final String USER_SECRET = "user-secret";
+    static final String CALLER = "jkowalski";
 
     static final String SERVER_ID = "mcp-servicedesk";
     static final String SYSTEM = "servicedesk";
@@ -51,6 +51,9 @@ abstract class ServerTestSupport {
     static void environment(DynamicPropertyRegistry registry) {
         GATEWAY.serverProperties().forEach((name, value) -> registry.add(name, () -> value));
         registry.add("servicedesk.backend.base-url", BACKEND::baseUrl);
+        // Short limits so the timeout and size tests run quickly; StubBackend's slow and huge tickets exceed them.
+        registry.add("servicedesk.backend.read-timeout", () -> "1s");
+        registry.add("servicedesk.backend.max-response-size", () -> "64KB");
     }
 
     @LocalServerPort
@@ -62,25 +65,20 @@ abstract class ServerTestSupport {
 
     /** An MCP client that reaches the server the way the gateway does, with the service account as C3 credential. */
     McpSyncClient serviceAccountClient() {
-        return clientWithCredential(SERVICE_KEY, SERVICE_ACCOUNT);
+        return clientWithCredential(SERVICE_KEY, BackendCredential.Type.SERVICE_ACCOUNT);
     }
 
     /**
      * An MCP client that reaches the server the way the gateway does, with {@code credential} in
-     * {@code X-MCP-Credential} labelled {@code type}. TestGateway always labels {@code user-secret}; the label is
-     * overwritten here (STATUS.md, "Czego potrzebuje ws-02").
+     * {@code X-MCP-Credential} labelled {@code type}.
      */
-    McpSyncClient clientWithCredential(String credential, String type) {
-        McpSyncHttpClientRequestCustomizer gateway = GATEWAY.asGateway(user -> user.username("jkowalski"), credential);
+    McpSyncClient clientWithCredential(String credential, BackendCredential.Type type) {
+        McpSyncHttpClientRequestCustomizer gateway =
+                GATEWAY.asGateway(user -> user.username(CALLER), credential, type);
         HttpClientStreamableHttpTransport transport = HttpClientStreamableHttpTransport.builder(baseUrl())
                 .endpoint(ENDPOINT)
                 .openConnectionOnStartup(false)
-                .httpRequestCustomizer((request, method, uri, body, context) -> {
-                    gateway.customize(request, method, uri, body, context);
-                    if (credential != null) {
-                        request.setHeader("X-MCP-Credential-Type", type);
-                    }
-                })
+                .httpRequestCustomizer(gateway)
                 .build();
         McpSyncClient client = McpClient.sync(transport).requestTimeout(Duration.ofSeconds(20)).build();
         client.initialize();
@@ -120,16 +118,12 @@ abstract class ServerTestSupport {
     }
 
     /**
-     * A rejected argument. Values the input schema already excludes (pattern, length, missing or extra
-     * properties) are answered by the MCP SDK's schema check before the tool runs, with its own text; the rest
-     * by the tool as C10 {@code invalid_argument} (STATUS.md, "Czego potrzebuje ws-02"). Either way the value is
-     * not echoed.
+     * A rejected argument: the starter answers C10 {@code invalid_argument} for schema violations and the tool for
+     * the rest, and neither echoes the value.
      */
     static void assertInvalidArgument(McpSchema.CallToolResult result, String value) {
         assertThat(result.isError()).isTrue();
-        assertThat(text(result)).satisfiesAnyOf(
-                text -> assertThat(text).contains("\"error\":\"invalid_argument\""),
-                text -> assertThat(text).contains("input validation failed"));
+        assertThat(text(result)).contains("\"error\":\"invalid_argument\"").doesNotContain("input validation failed");
         if (value.length() >= 3) {
             assertThat(text(result)).doesNotContain(value);
         }

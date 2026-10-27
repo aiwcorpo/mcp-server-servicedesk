@@ -11,8 +11,10 @@ do modelu, który może go potraktować jak instrukcję. Wzorcem jest `get_ticke
 3. `mcp-integration`: wywołanie systemu w adapterze. Poświadczenie zawsze z
    `CredentialContext.require(SYSTEM)` i `credential::applyTo`; dla nagłówka innego niż `Authorization`
    (np. `PRIVATE-TOKEN` GitLaba) `credential.value()`. 404 i 403 systemu -> pusty wynik (jeden kod
-   `not_found_or_denied`), 401 -> `CredentialRequiredException(SYSTEM)`. Odpowiedź do prywatnego DTO z
-   `@JsonIgnoreProperties(ignoreUnknown = true)`, potem do domeny.
+   `not_found_or_denied`), 401 -> `CredentialRequiredException(SYSTEM)`, 3xx i odpowiedź, której nie da się
+   użyć (nie parsuje się, za duża) -> `BackendResponseException` ze stałym tekstem i bez przyczyny (komunikat
+   parsera cytuje treść odpowiedzi). Odpowiedź czytana przez skonfigurowane JSON pointery, potem do domeny;
+   zgłoszenie bez poprawnego `id` albo kolejki to "niewidoczne", nie błąd argumentu.
 4. `mcp-tools`: cienka metoda `@Tool` z `@ToolRisk`, walidacją argumentów i wywołaniem przypadku użycia;
    mapowanie wyjątku domeny na kod C10 w `ServicedeskToolErrors`.
 5. `mcp-app`: dopisanie beana narzędzia w `McpToolsConfiguration` (jawna lista; sam `@Tool` nie wystarczy),
@@ -30,8 +32,10 @@ do modelu, który może go potraktować jak instrukcję. Wzorcem jest `get_ticke
   narzędzie potrzebuje filtrów, to są osobne, ograniczone pola (status, typ, przypisany) parsowane i
   składane przez serwer z escapowaniem.
 - Walidacja przed systemem. Wzorzec i długość identyfikatora, limity wielkości (`size <= 100`),
-  zamknięte listy wartości. Błąd walidacji to `InvalidToolArgumentException` z własnym tekstem (starter oddaje
-  go jako `invalid_argument`); nigdy z treścią odpowiedzi systemu.
+  zamknięte listy wartości. Schemat z `ServicedeskToolSchemas` (zamknięty: `additionalProperties: false`)
+  egzekwuje starter i odpowiada C10 `invalid_argument` ze zdarzeniem C8, bez wartości i bez nazw spoza schematu.
+  Walidacja w kodzie (`InvalidToolArgumentException` ze stałym tekstem) zostaje jako druga linia; nigdy z
+  wartością argumentu ani z treścią odpowiedzi systemu.
 - Błędy tylko przez kody C10. Wyjątek domeny -> `ToolErrorMapping` -> `SafeError` z kodem z
   `ToolErrorCode`. Gotowy `SanitizedToolException` wolno rzucić, gdy narzędzie samo zna kod. Inne wyjątki
   starter zamienia na `internal_error`; komunikat nie zawiera odpowiedzi systemu, nagłówków ani sekretów.

@@ -7,6 +7,7 @@ import io.modelcontextprotocol.spec.McpSchema;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import pl.aiwcorpo.mcp.platform.security.BackendCredential;
 
 /** {@code add_note} (UPDATE): checks the ticket's queue first, then writes an internal note. */
 class AddNoteToolTest extends ServerTestSupport {
@@ -27,7 +28,8 @@ class AddNoteToolTest extends ServerTestSupport {
             assertThat(BACKEND.requests()).containsExactly("GET /api/v1/tickets/IT-1", "POST /api/v1/tickets/IT-1/notes");
             assertThat(BACKEND.authorizations()).containsExactly(SERVICE_KEY, SERVICE_KEY);
             assertThat(BACKEND.noteBodies()).containsExactly(
-                    "IT-1 {\"visibility\":\"internal\",\"body\":\"Replaced the toner.\\n\\\"Done\\\" & closed\"}");
+                    "IT-1 {\"visibility\":\"internal\",\"body\":\"[Added through the MCP platform on behalf of jkowalski]"
+                            + "\\nReplaced the toner.\\n\\\"Done\\\" & closed\"}");
         }
     }
 
@@ -44,7 +46,7 @@ class AddNoteToolTest extends ServerTestSupport {
 
     @Test
     void withoutCredentialAsksToConnect() {
-        try (McpSyncClient client = clientWithCredential(null, SERVICE_ACCOUNT)) {
+        try (McpSyncClient client = clientWithCredential(null, BackendCredential.Type.SERVICE_ACCOUNT)) {
             assertCredentialRequired(call(client, "add_note", Map.of("ticketId", "IT-1", "body", "x")));
         }
         assertThat(BACKEND.requests()).isEmpty();
@@ -52,7 +54,7 @@ class AddNoteToolTest extends ServerTestSupport {
 
     @Test
     void credentialRejectedByTheBackendAsksToReconnect() {
-        try (McpSyncClient client = clientWithCredential(StubBackend.EXPIRED_CREDENTIAL, SERVICE_ACCOUNT)) {
+        try (McpSyncClient client = clientWithCredential(StubBackend.EXPIRED_CREDENTIAL, BackendCredential.Type.SERVICE_ACCOUNT)) {
             assertCredentialRequired(call(client, "add_note", Map.of("ticketId", "IT-1", "body", "x")));
         }
         assertThat(BACKEND.noteBodies()).isEmpty();
@@ -87,7 +89,8 @@ class AddNoteToolTest extends ServerTestSupport {
             }
             for (String body : new String[] {" \n ", "a\u0007b"}) {
                 assertThat(text(call(client, "add_note", Map.of("ticketId", "IT-1", "body", body))))
-                        .as("passes the schema, stopped by the tool").contains("\"error\":\"invalid_argument\"", "body must");
+                        .as("blank text passes the schema and is stopped by the tool, control characters by the starter")
+                        .contains("\"error\":\"invalid_argument\"");
             }
             assertInvalidArgument(call(client, "add_note", Map.of("ticketId", "IT-1")), "");
             assertInvalidArgument(call(client, "add_note", Map.of("ticketId", "IT-1", "body", "x", "public", true)), "");

@@ -1,6 +1,6 @@
 # mcp-servicedesk: serwer MCP platformy
 
-Serwer MCP dla service desku, zbudowany na `mcp-platform-starter` 3.0.0-alpha-5 (Java 25, Spring Boot 4.1.0,
+Serwer MCP dla service desku, zbudowany na `mcp-platform-starter` 3.0.0-alpha-6 (Java 25, Spring Boot 4.1.0,
 Spring AI 2.0.0, kontrakty `mcp-contracts` 2.0.2). Stoi wyłącznie za gateway'em platformy: przyjmuje ruch tylko
 po mTLS z wewnętrznym JWT gateway'a (C2), a do service desku woła z poświadczeniem, które gateway dołącza do
 każdego żądania (C3). Bez poprawnego JWT odpowiada 401, nie ma trybu anonimowego.
@@ -43,8 +43,8 @@ zasobu (projekt, klasyfikacja) pochodzą z systemu.
 
 | Narzędzie | Ryzyko | Uprawnienie (C9) | Poświadczenie | Argumenty | Wynik |
 | --- | --- | --- | --- | --- | --- |
-| `search_tickets` | `READ_ONLY` | `mcp-servicedesk-read` | `service-account` albo `user-secret` (C3) | `queue` (obowiązkowa, wzorzec `ServiceDeskQueueId`), `text` 1-200 znaków | `{queue, tickets[{id, queue, status, updated, untrustedText{subject}}], truncated}`, najwyżej 20 |
-| `get_ticket` | `READ_ONLY` | `mcp-servicedesk-read` | jw. | `ticketId` (wzorzec `ServiceDeskTicketId`) | `{id, queue, status, priority, created, updated, untrustedText{subject, description}}` |
+| `search_tickets` | `READ_ONLY` | `mcp-servicedesk-read` | `service-account` albo `user-secret` (C3) | `queue` (obowiązkowa, wzorzec `ServiceDeskQueueId`), `text` 1-200 znaków | `{queue, tickets[{id, queue, status, updated, subject}], truncated}`, najwyżej 20; `subject` to obiekt z oznaczeniem danych (niżej) |
+| `get_ticket` | `READ_ONLY` | `mcp-servicedesk-read` | jw. | `ticketId` (wzorzec `ServiceDeskTicketId`) | `{id, queue, status, priority, created, updated, subject, description}`; `subject` i `description` to obiekty z oznaczeniem danych (niżej) |
 | `add_note` | `UPDATE` | `mcp-servicedesk-write` | jw. | `ticketId`, `body` 1-10000 znaków | `{ticketId, noteId}` (`noteId` null, gdy system go nie zwraca) |
 
 Klient widzi nazwy z prefiksem `servicedesk__` (dokłada go gateway, C5). Wzorce identyfikatorów są z
@@ -54,13 +54,25 @@ konfiguracji kolejek i przy wartościach zwracanych przez system.
 Błędy (C10): `not_found_or_denied` z jednym tekstem dla zgłoszenia lub kolejki nieistniejącej, ukrytej przez
 system (404, 403) i spoza dozwolonych kolejek; `credential_required` przy braku poświadczenia i przy 401 z
 systemu (także 401 na zapisie notatki); `invalid_argument`; `upstream_unavailable` (system nieosiągalny, 502-504);
-`internal_error` (inne błędy systemu, nieczytelna odpowiedź). Argumenty, które łamią `inputSchema` (wzorzec,
-długość, brak pola, pole nadmiarowe), odrzuca już walidacja schematu w MCP SDK, zanim narzędzie się wykona
-(STATUS.md, "Czego potrzebuje ws-02").
+`internal_error` (inne błędy systemu, nieczytelna odpowiedź, przekierowanie, odpowiedź ponad limit rozmiaru).
+Argumenty łamiące `inputSchema` (wzorzec, długość, brak pola, pole nadmiarowe) odrzuca starter jako
+`invalid_argument` ze zdarzeniem audytu C8, bez wartości argumentu i bez nazw spoza schematu (ani w wyniku, ani
+w logu); resztę (tekst złożony z samych spacji) narzędzie.
 
-Wynik zawiera tylko pola z mapowania. Tekst wpisany przez ludzi w service desku (temat, opis) jest w osobnym
-obiekcie `untrustedText`, zamieniony na czysty tekst (bez tagów, skryptów, znaków sterujących), opis obcięty do
-8000 znaków ze znacznikiem `...[cut]`.
+Wynik zawiera tylko pola z mapowania. Tekst wpisany przez ludzi w service desku (temat, opis) ma kształt
+`UntrustedText` z kontraktów (CC-072): `{"kind":"untrusted-data","format":"text/plain","text":"...","truncated":false}`.
+Tekst jest zamieniony na czysty tekst: najpierw dekodowane są encje, potem usuwane znaczniki i skrypty (powtarzane
+do skutku), więc zakodowany tag nie wraca jako HTML; znaki sterujące znikają, opis jest obcięty do 8000 znaków
+ze znacznikiem `...[cut]` i `truncated: true`. W wyniku `<` i `&` to zwykłe znaki tekstu.
+
+### Autor notatki przy koncie serwisowym
+
+Przy poświadczeniu `service-account` autorem każdej notatki w service desku jest konto platformy. Żeby zespół
+service desku widział, kto ją zlecił, serwer dokleja na początku treści stałą linię
+`[Added through the MCP platform on behalf of <użytkownik>]`. Nazwa pochodzi z zaufanego tokenu gateway'a
+(`CallerContext`: `usr`, a gdy go brak `sub`), nie z argumentów narzędzia, i jest ograniczona do znaków
+`A-Za-z0-9._@-` (inaczej `unknown`). Przy `user-secret` autorem jest sam użytkownik i prefiksu nie ma. Limit
+10000 znaków dotyczy tekstu od modelu, prefiks dochodzi do niego.
 
 ## Granica kolejek
 
@@ -136,7 +148,7 @@ adapter. Przekierowania 3xx nie są śledzone (`internal_error`).
 ```
 gateway --mTLS (CN mcp-gateway) + JWT C2 (aud mcp-servicedesk, tool add_note) + X-MCP-Credential(-Type)-->
   starter: InternalJwtFilter (inaczej 401) -> CredentialHeaderFilter -> AuditingToolCallback (C8)
-  -> MCP SDK: walidacja argumentów względem inputSchema
+  -> starter: walidacja argumentów względem inputSchema (inaczej C10 invalid_argument + C8)
   -> ServicedeskTool.addNote: walidacja ticketId i body
   -> ServicedeskService: QueueAccessPolicy (tryb + typ poświadczenia), GET zgłoszenia, kontrola id i kolejki
   -> ServicedeskResourceAdapter: CredentialContext.require("servicedesk"), POST notatki
@@ -145,8 +157,10 @@ gateway --mTLS (CN mcp-gateway) + JWT C2 (aud mcp-servicedesk, tool add_note) + 
 ## Konfiguracja
 
 Konfiguracja bazowa (`mcp-app/src/main/resources/application.yml`) jest produkcyjna: mTLS, JWKS gateway'a po
-TLS z CA wewnętrznym, `jti` w Redisie. Profil `dev` wyłącza tylko TLS i służy testom; pozostałe ułatwienia
-(klucze testowe, `jti` w pamięci, `mtls.required=false`) daje `TestGateway`, a starter odrzuca je poza `dev`.
+TLS z CA wewnętrznym, `jti` w Redisie. Profil `dev` (`application-dev.yml`, testy i uruchomienie lokalne)
+wyłącza TLS i mTLS, trzyma `jti` w pamięci i dopuszcza klucze testowe; starter odrzuca te ustawienia poza `dev`.
+Odpowiedź systemu jest ograniczona do 1 MB (`servicedesk.backend.max-response-size`), przekierowania 3xx są
+błędem, `/actuator/prometheus` nie jest wystawiony.
 
 | Zmienna | Znaczenie | Domyślnie |
 | --- | --- | --- |
@@ -154,7 +168,8 @@ TLS z CA wewnętrznym, `jti` w Redisie. Profil `dev` wyłącza tylko TLS i słu�
 | `MCP_GATEWAY_JWKS_URI` | JWKS wewnętrznego JWT, np. `https://mcp-gateway.internal:8443/.well-known/jwks.json` | wymagane |
 | `MCP_GATEWAY_ISSUER` | `iss` C2 | `https://mcp-gateway.internal` |
 | `MCP_CONNECT_URL` | strona portalu do połączenia konta, z `{system}`; trafia do `credential_required` | wymagane |
-| `MCP_SERVICEDESK_URL` | adres bazowy API service desku (bez query i fragmentu) | wymagane |
+| `MCP_SERVICEDESK_URL` | adres bazowy API service desku (bez query i fragmentu); poza `dev` tylko `https` | wymagane |
+| `MCP_SERVICEDESK_ALLOW_PLAIN_HTTP` | `true` dopuszcza `http` poza `dev`, wyłącznie dla mocków `mcp-platform-dev` (poświadczenie idzie wtedy otwartym tekstem; ostrzeżenie w logu) | `false` |
 | `MCP_SERVICEDESK_SSL_BUNDLE` | bundle SSL dla HTTPS systemu, np. `mcp-internal-ca`; puste = zaufanie JDK | puste |
 | `MCP_SERVICEDESK_CREDENTIAL_MODE` | `service-account` albo `user-secret` (sekcja "Granica kolejek") | `service-account` |
 | `MCP_SERVICEDESK_ALLOWED_QUEUES` | dozwolone kolejki, po przecinku; w trybie `service-account` bez nich wszystko jest odmawiane | puste |
@@ -165,45 +180,92 @@ Endpoint MCP to `/mcp` (domyślne ustawienie startera, tak jak oczekuje gateway:
 https://mcp-servicedesk.internal:8443/mcp`). Bez JWT odpowiada tylko `/actuator/health` (i `liveness`,
 `readiness`), ale TLS i tak wymaga certyfikatu klienta z CA wewnętrznego.
 
-Serwer nie wstaje bez `MCP_GATEWAY_JWKS_URI`, `MCP_CONNECT_URL`, `MCP_SERVICEDESK_URL` i plików TLS.
+Poza profilem `dev` serwer nie wstaje bez `MCP_GATEWAY_JWKS_URI` (tylko `https`), `MCP_CONNECT_URL`,
+`MCP_SERVICEDESK_URL` (`https`) i plików TLS. Od startera 3.0.0-alpha-4 wymaga też, żeby `server-id` był na liście
+`SystemId` kontraktów; `servicedesk` jest.
 
-Na hoście ze środowiskiem `mcp-platform-dev` (certyfikat i użytkownik Redisa `mcp-servicedesk` są w
-środowisku; mocka service desku tam nie ma, więc `MCP_SERVICEDESK_URL` wskazuje dowolny port, a wywołania
-narzędzi kończą się `upstream_unavailable`):
+`java` w `PATH` może być starsza niż 25 (wtedy `UnsupportedClassVersionError`), dlatego poniżej zawsze
+`$JAVA_HOME/bin/java`.
+
+## Uruchomienie lokalne bez środowiska
+
+Profil `dev` (musi być jedynym aktywnym profilem): zwykłe HTTP na 127.0.0.1, `jti` w pamięci, bez Redisa,
+certyfikatów i sekretów. Gateway'a nie ma, więc każde żądanie z JWT kończy się 503 (JWKS niedostępny); ten tryb
+służy do sprawdzenia, że serwer wstaje i odrzuca ruch bez JWT. Narzędzia sprawdzają testy (`./mvnw verify`).
 
 ```bash
-dev=../mcp-platform-dev
-export MCP_TLS_STORE_PASSWORD="$(grep '^TLS_STORE_PASSWORD=' $dev/.secrets/dev.env | cut -d= -f2-)"
-export MCP_TLS_KEYSTORE=$dev/certs/mcp-servicedesk/keystore.p12 MCP_TLS_TRUSTSTORE=$dev/certs/ca/truststore.p12
-export MCP_PORT=18530 MCP_BIND=127.0.0.1 MCP_REDIS_PORT=16379 MCP_SERVICEDESK_URL=http://localhost:18531
-export MCP_REDIS_PASSWORD="$(grep '^REDIS_MCP_SERVICEDESK_PASSWORD=' $dev/.secrets/dev.env | cut -d= -f2-)"
+export JAVA_HOME=/opt/homebrew/Cellar/openjdk@25/25.0.4.1/libexec/openjdk.jdk/Contents/Home
+./mvnw -B verify
+SPRING_PROFILES_ACTIVE=dev MCP_PORT=18530 "$JAVA_HOME/bin/java" -jar mcp-app/target/mcp-servicedesk.jar
+# w drugim terminalu:
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:18530/actuator/health          # 200
+curl -s -o /dev/null -w '%{http_code}\n' -X POST -H 'Content-Type: application/json' \
+     -H 'Accept: application/json, text/event-stream' \
+     -d '{"jsonrpc":"2.0","id":1,"method":"ping"}' http://127.0.0.1:18530/mcp            # 401
+```
+
+Wartości domyślne profilu są w `mcp-app/src/main/resources/application-dev.yml` (backend
+`http://localhost:18081`, portal `http://localhost:18090`); każdą można nadpisać zmienną z tabeli wyżej.
+
+Ryzyko: `application-dev.yml` jest w jarze produkcyjnym, a profil `dev` przyjmuje JWT podpisane opublikowanymi
+kluczami testowymi kontraktów i nie wymaga certyfikatu klienta. Dlatego `dev` słucha wyłącznie na adresie pętli
+zwrotnej: starter odmawia startu z `dev` przy innym `server.address`, a test `DevProfileLoopbackTest` pilnuje
+tego w serwerze. Nie ustawiaj `SERVER_ADDRESS` ani `MCP_BIND` przy `dev` i nigdy nie włączaj `dev` na hoście ani
+w kontenerze, do którego łączy się gateway: tam działa wyłącznie konfiguracja bazowa z mTLS.
+
+## Uruchomienie z mcp-platform-dev (mTLS)
+
+Konfiguracja produkcyjna na hoście, z certyfikatami i Redisem środowiska `mcp-platform-dev` (`make up` już
+uruchomione). Środowisko ma certyfikat (`certs/mcp-servicedesk`, SAN `mcp-servicedesk.internal`) i użytkownika
+Redisa `mcp-servicedesk`. Mocka service desku tam nie ma, więc `MCP_SERVICEDESK_URL` wskazuje dowolny port, a
+wywołania narzędzi kończą się `upstream_unavailable`.
+
+Magazyny PKCS12 i Redis są chronione hasłami z `$MCP_PLATFORM_DEV/.secrets/dev.env`, więc ten wariant wymaga
+ich odczytu:
+
+```bash
+export JAVA_HOME=/opt/homebrew/Cellar/openjdk@25/25.0.4.1/libexec/openjdk.jdk/Contents/Home
+export MCP_PLATFORM_DEV=<workspace>/mcp-platform-dev           # ścieżka bezwzględna
+export MCP_TLS_STORE_PASSWORD="$(grep '^TLS_STORE_PASSWORD=' "$MCP_PLATFORM_DEV/.secrets/dev.env" | cut -d= -f2-)"
+export MCP_REDIS_PASSWORD="$(grep '^REDIS_MCP_SERVICEDESK_PASSWORD=' "$MCP_PLATFORM_DEV/.secrets/dev.env" | cut -d= -f2-)"
+export MCP_TLS_KEYSTORE="$MCP_PLATFORM_DEV/certs/mcp-servicedesk/keystore.p12"
+export MCP_TLS_TRUSTSTORE="$MCP_PLATFORM_DEV/certs/ca/truststore.p12"
+export MCP_PORT=18530 MCP_BIND=127.0.0.1 MCP_REDIS_PORT=16379
+export MCP_SERVICEDESK_URL=http://localhost:18531 MCP_SERVICEDESK_ALLOW_PLAIN_HTTP=true   # bez mocka; poza dev https
 export MCP_SERVICEDESK_ALLOWED_QUEUES=IT
 export MCP_GATEWAY_JWKS_URI=https://localhost:18445/.well-known/jwks.json
 export MCP_CONNECT_URL='http://localhost:18090/connections?system={system}'
-java -jar mcp-app/target/mcp-servicedesk.jar
-curl --cacert $dev/certs/ca/ca.crt --cert $dev/certs/mcp-gateway/tls.crt --key $dev/certs/mcp-gateway/tls.key \
-     --resolve mcp-servicedesk.internal:18530:127.0.0.1 https://mcp-servicedesk.internal:18530/actuator/health   # 200
+"$JAVA_HOME/bin/java" -jar mcp-app/target/mcp-servicedesk.jar
+# w drugim terminalu (te same zmienne MCP_PLATFORM_DEV), certyfikat klienta gateway'a:
+TLS=(--cacert "$MCP_PLATFORM_DEV/certs/ca/ca.crt" --resolve mcp-servicedesk.internal:18530:127.0.0.1
+     --cert "$MCP_PLATFORM_DEV/certs/mcp-gateway/tls.crt" --key "$MCP_PLATFORM_DEV/certs/mcp-gateway/tls.key")
+curl -s -o /dev/null -w '%{http_code}\n' "${TLS[@]}" https://mcp-servicedesk.internal:18530/actuator/health   # 200
+curl -s -o /dev/null -w '%{http_code}\n' "${TLS[@]}" -X POST -H 'Content-Type: application/json' \
+     -d '{"jsonrpc":"2.0","id":1,"method":"ping"}' https://mcp-servicedesk.internal:18530/mcp                     # 401
 ```
 
-`POST /mcp` bez JWT daje 401, połączenie bez certyfikatu klienta jest zrywane w handshake'u.
+Połączenie bez certyfikatu klienta jest zrywane w handshake'u. Pełne wywołanie narzędzia wymaga gateway'a z
+hosta (`mcp-gateway/scripts/run-dev-host.sh`, JWKS na `localhost:18445`) skonfigurowanego na ten serwer.
 
 ## Testy
 
-`./mvnw verify` (JDK 25, bez Dockera): 66 testów.
+`./mvnw verify` (JDK 25, bez Dockera): 79 testów.
 
 | Klasa | Co sprawdza |
 | --- | --- |
-| `SearchTicketsToolTest` | zapytanie budowane przez serwer (`GET /api/v1/queues/IT/tickets?q=...&limit=21`), tekst jako zakodowana wartość, wyniki tylko z kolejki, brak pól spoza mapowania; `credential_required` (brak i 401); nieznana kolejka -> `not_found_or_denied`; złe argumenty nie docierają do systemu |
-| `GetTicketToolTest` | poświadczenie z C3 dociera do systemu; HTML i pola dodatkowe nie wychodzą; brak poświadczenia i 401; 404 = 403; złe `ticketId` (także pole nadmiarowe) nie docierają do systemu; poświadczenie i treść błędu systemu nie trafiają do wyniku ani logu |
-| `AddNoteToolTest` | odczyt zgłoszenia, potem POST z notatką wewnętrzną; `UPDATE` bez `readOnlyHint`/`destructiveHint`; brak poświadczenia, 401 na odczycie i na zapisie; 404, 403 i 403 na zapisie dają ten sam błąd; złe argumenty |
+| `SearchTicketsToolTest` | zapytanie budowane przez serwer (`GET /api/v1/queues/IT/tickets?q=...&limit=21`), tekst jako zakodowana wartość, wyniki tylko z kolejki, brak pól spoza mapowania (trafienie z innej, także dozwolonej kolejki odpada); `credential_required` (brak i 401); nieznana kolejka -> `not_found_or_denied`; złe argumenty nie docierają do systemu |
+| `GetTicketToolTest` | poświadczenie z C3 dociera do systemu; HTML i pola dodatkowe nie wychodzą; brak poświadczenia i 401; 404 = 403; złe `ticketId` (także pole nadmiarowe) nie docierają do systemu; poświadczenie i treść błędu systemu nie trafiają do wyniku ani logu; nieczytelna odpowiedź, przekierowanie, timeout i odpowiedź ponad limit; nazwa argumentu z fałszywą linią audytu daje `invalid_argument`, zdarzenie C8 i żadnej sfałszowanej linii w logu |
+| `AddNoteToolTest` | odczyt zgłoszenia, potem POST z notatką wewnętrzną i linią o zleceniodawcy; `UPDATE` bez `readOnlyHint`/`destructiveHint`; brak poświadczenia, 401 na odczycie i na zapisie; 404, 403 i 403 na zapisie dają ten sam błąd; złe argumenty |
 | `QueueBoundaryTest` | konto serwisowe: zgłoszenie z innej kolejki, alias, bez kolejki, 403 i nieistniejące dają bajtowo ten sam błąd w `get_ticket` i `add_note`, bez żadnego zapisu; zgłoszenie przeniesione z dozwolonej kolejki przestaje być dostępne (także w wyszukiwaniu z nieaktualnym indeksem), przeniesione do dozwolonej jest dostępne; wyszukiwanie w niedozwolonej kolejce (także `it` zamiast `IT`) nie dociera do systemu; poświadczenie użytkownika nie poszerza trybu `service-account` |
 | `NoAllowedQueuesTest` | tryb `service-account` bez listy: każde narzędzie `not_found_or_denied`, zero wywołań systemu |
 | `UserSecretModeTest` | tryb `user-secret`: token użytkownika sięga każdej kolejki, którą pokazuje system; poświadczenie oznaczone `service-account` bez listy jest odrzucane |
+| `ProductionConfigurationTest` | konfiguracja bazowa: `client-auth: need`; backend `http` poza `dev` odrzucony (chyba że jawnie dopuszczony); `dev` na 127.0.0.1 |
+| `DevProfileLoopbackTest` | `dev` z adresem innym niż pętla zwrotna nie wstaje |
 | `ToolDefinitionsTest` | dokładnie trzy narzędzia z ryzykiem; `inputSchema` zamknięte (`additionalProperties: false`), wzorce z kontraktu, limity długości; opisy bez instrukcji |
 | `GatewayOnlyAccessTest` | bez JWT 401 (`tools/call`, `ping`, `initialize`), JWT innego serwera, innego narzędzia, wariant serwisowy i przeterminowany -> 401; bez JWT tylko health |
 | `ServicedeskServiceTest`, `QueueAccessPolicyTest` | granica kolejek bez Springa |
-| `ServicedeskToolTest` | walidacja w narzędziu bez schematu SDK przed nią (`InvalidToolArgumentException`) |
-| `ServicedeskApiTest`, `TicketJsonTest`, `PlainTextTest` | kodowanie URI, treść notatki, walidacja konfiguracji, dwa różne kształty API, HTML -> tekst |
+| `ServicedeskToolTest` | walidacja w narzędziu bez walidacji schematu przed nią (`InvalidToolArgumentException`) |
+| `ServicedeskApiTest`, `TicketJsonTest`, `PlainTextTest` | kodowanie URI, treść notatki, walidacja konfiguracji (także nakładające się pola stałe notatki), dwa różne kształty API, HTML -> tekst (zakodowany tag nie wraca jako znacznik) |
 
 `StubBackend` (test) to serwer HTTP udający service desk w układzie referencyjnym; w `mcp-platform-dev` nie ma
 mocka service desku.

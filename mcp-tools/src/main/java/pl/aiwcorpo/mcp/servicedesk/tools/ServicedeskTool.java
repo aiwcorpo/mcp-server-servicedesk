@@ -88,23 +88,31 @@ public class ServicedeskTool {
     }
 
     /**
-     * Text written by people in the service desk. Kept apart from the fields the server controls so that the
-     * client can tell data from the platform's own output.
+     * Free text from the service desk in the shape of the contracts' {@code UntrustedText} (CC-072): the client
+     * can tell data written by people in the service desk from the platform's own output.
+     *
+     * @param truncated the text was cut at the length limit
      */
-    public record UntrustedText(String subject, String description) {
-    }
+    public record UntrustedText(String kind, String format, String text, boolean truncated) {
 
-    public record TicketView(String id, String queue, String status, String priority, String created,
-            String updated, UntrustedText untrustedText) {
+        static final String KIND = "untrusted-data";
+        static final String PLAIN = "text/plain";
 
-        static TicketView of(Ticket ticket) {
-            return new TicketView(ticket.id(), ticket.queue(), ticket.status(), ticket.priority(), ticket.created(),
-                    ticket.updated(), new UntrustedText(ticket.subject(), ticket.description()));
+        static UntrustedText plain(String text) {
+            return text == null ? null : new UntrustedText(KIND, PLAIN, text, text.endsWith(Ticket.TEXT_CUT_MARK));
         }
     }
 
-    public record TicketSummaryView(String id, String queue, String status, String updated,
-            UntrustedText untrustedText) {
+    public record TicketView(String id, String queue, String status, String priority, String created,
+            String updated, UntrustedText subject, UntrustedText description) {
+
+        static TicketView of(Ticket ticket) {
+            return new TicketView(ticket.id(), ticket.queue(), ticket.status(), ticket.priority(), ticket.created(),
+                    ticket.updated(), UntrustedText.plain(ticket.subject()), UntrustedText.plain(ticket.description()));
+        }
+    }
+
+    public record TicketSummaryView(String id, String queue, String status, String updated, UntrustedText subject) {
     }
 
     /** @param truncated more tickets matched than the 20 returned */
@@ -113,7 +121,7 @@ public class ServicedeskTool {
         static TicketSearchView of(TicketSearch search) {
             return new TicketSearchView(search.queue(), search.tickets().stream()
                     .map(t -> new TicketSummaryView(t.id(), t.queue(), t.status(), t.updated(),
-                            new UntrustedText(t.subject(), null)))
+                            UntrustedText.plain(t.subject())))
                     .toList(), search.truncated());
         }
     }

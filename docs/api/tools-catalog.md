@@ -15,5 +15,9 @@ Zasoby C7 (do `@ResourceRef` w M2/M3): `queue` -> `ServiceDesk::Queue{id}`, `tic
 (rodzic: kolejka, którą zwraca system). Opisy narzędzi (dokładny tekst, wchodzi do `definitionHash`) są w
 `ServicedeskTool`, schematy wejścia w `ServicedeskToolSchemas`.
 
+Tekst z service desku (`subject`, `description`) ma w wyniku kształt `UntrustedText` (CC-072):
+`{kind: "untrusted-data", format: "text/plain", text, truncated}`. `add_note` przy koncie serwisowym dokleja na
+początku treści linię o zleceniodawcy (README, "Autor notatki przy koncie serwisowym").
+
 Konwencje: nazwy `snake_case`, czasownik i obiekt, bez prefiksu systemu (dokłada go gateway); opis mówi, co
 narzędzie zwraca, bez instrukcji dla modelu.

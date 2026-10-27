@@ -7,6 +7,7 @@ import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.context.TestPropertySource;
+import pl.aiwcorpo.mcp.platform.security.BackendCredential;
 
 /** Service-account mode without a queue list: fail-closed, every call refused, the service desk never asked. */
 @TestPropertySource(properties = "servicedesk.access.allowed-queues=")
@@ -24,7 +25,7 @@ class NoAllowedQueuesTest extends ServerTestSupport {
             assertNotFoundOrDenied(call(client, "add_note", Map.of("ticketId", "IT-1", "body", "x")));
             assertNotFoundOrDenied(call(client, "search_tickets", Map.of("queue", "IT", "text", "x")));
         }
-        try (McpSyncClient client = clientWithCredential("Bearer user-token-of-jkowalski", USER_SECRET)) {
+        try (McpSyncClient client = clientWithCredential("Bearer user-token-of-jkowalski", BackendCredential.Type.USER_SECRET)) {
             assertNotFoundOrDenied(call(client, "get_ticket", Map.of("ticketId", "IT-1")));
         }
         assertThat(BACKEND.requests()).isEmpty();

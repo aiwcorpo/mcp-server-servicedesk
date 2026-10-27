@@ -77,6 +77,17 @@ class ServicedeskServiceTest {
     }
 
     @Test
+    void searchDropsHitsOfAnotherAllowedQueueToo() {
+        ServicedeskService twoQueues =
+                new ServicedeskService(desk, new QueueAccessPolicy(CredentialMode.SERVICE_ACCOUNT, Set.of("IT", "OPS")));
+        desk.hits = new ArrayList<>(List.of(summary("IT-1", "IT"), summary("OPS-5", "OPS")));
+
+        assertThat(twoQueues.searchTickets("IT", "printer").tickets()).extracting(TicketSummary::id)
+                .as("the queue asked for is the boundary, not only the set the server may serve")
+                .containsExactly("IT-1");
+    }
+
+    @Test
     void withoutAllowedQueuesNothingReachesTheServiceDesk() {
         ServicedeskService closed =
                 new ServicedeskService(desk, new QueueAccessPolicy(CredentialMode.SERVICE_ACCOUNT, Set.of()));

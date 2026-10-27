@@ -14,8 +14,22 @@ class PlainTextTest {
     }
 
     @Test
-    void escapedMarkupStaysTextAndIsNotDecodedTwice() {
-        assertThat(PlainText.of("a &lt;script&gt; b &amp;lt; c &#65;&#x42;", 100)).isEqualTo("a <script> b &lt; c AB");
+    void entitiesAreDecodedOnceAndNeverBecomeMarkup() {
+        assertThat(PlainText.of("a &lt;script&gt;steal()&lt;/script&gt; b &amp;lt;i&amp;gt; c &#65;&#x42;", 100))
+                .as("an escaped script block is dropped like a real one; a doubly escaped tag stays literal text")
+                .isEqualTo("a b &lt;i&gt; c AB");
+        assertThat(PlainText.of("&#60;img src=x onerror=steal()&#62;ok&#x3C;a href=\"javascript:x\"&#x3E;link", 100))
+                .isEqualTo("oklink");
+        assertThat(PlainText.of("&lt;&lt;b&gt;script&gt;steal()", 100))
+                .as("removing a tag must not join its surroundings into a new one").doesNotContain("<script");
+    }
+
+    @Test
+    void whatIsLeftContainsNoTag() {
+        for (String raw : new String[] {"<<b>script>x</script>", "&lt;<b>img src=x onerror=y&gt;", "<scr<script></script>ipt>x",
+                "a &amp;lt;b&amp;gt; &lt;/p&gt;"}) {
+            assertThat(PlainText.of(raw, 100)).doesNotContainPattern("<[A-Za-z/!][^>]*>");
+        }
     }
 
     @Test

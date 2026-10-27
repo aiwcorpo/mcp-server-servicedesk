@@ -7,6 +7,7 @@ import io.modelcontextprotocol.spec.McpSchema;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import pl.aiwcorpo.mcp.platform.security.BackendCredential;
 
 /** {@code search_tickets}: the queue is mandatory, the server builds the request, hits stay in the queue. */
 class SearchTicketsToolTest extends ServerTestSupport {
@@ -24,8 +25,10 @@ class SearchTicketsToolTest extends ServerTestSupport {
             assertThat(result.isError()).isFalse();
             assertThat(text(result))
                     .contains("\"queue\":\"IT\"", "\"id\":\"IT-1\"", "\"id\":\"IT-2\"", "\"id\":\"MOVED-3\"",
-                            "\"untrustedText\":{\"subject\":\"Printer on floor 3 (IT-1)\"", "\"truncated\":false")
-                    .as("cross-queue hit and hit without a queue are dropped").doesNotContain("FIN-7", "IT-9")
+                            "\"subject\":{\"kind\":\"untrusted-data\",\"format\":\"text/plain\","
+                                    + "\"text\":\"Printer on floor 3 (IT-1)\",\"truncated\":false}")
+                    .as("hits of another queue (allowed or not) and a hit without a queue are dropped")
+                    .doesNotContain("FIN-7", "OPS-5", "IT-9")
                     .doesNotContain("jkowalski@corp.internal");
             assertThat(BACKEND.requests()).containsExactly("GET /api/v1/queues/IT/tickets?q=printer&limit=21");
             assertThat(BACKEND.authorizations()).containsExactly(SERVICE_KEY);
@@ -57,7 +60,7 @@ class SearchTicketsToolTest extends ServerTestSupport {
 
     @Test
     void withoutCredentialAsksToConnect() {
-        try (McpSyncClient client = clientWithCredential(null, SERVICE_ACCOUNT)) {
+        try (McpSyncClient client = clientWithCredential(null, BackendCredential.Type.SERVICE_ACCOUNT)) {
             assertCredentialRequired(call(client, "search_tickets", Map.of("queue", "IT", "text", "printer")));
         }
         assertThat(BACKEND.requests()).isEmpty();
@@ -65,7 +68,7 @@ class SearchTicketsToolTest extends ServerTestSupport {
 
     @Test
     void credentialRejectedByTheBackendAsksToReconnect() {
-        try (McpSyncClient client = clientWithCredential(StubBackend.EXPIRED_CREDENTIAL, SERVICE_ACCOUNT)) {
+        try (McpSyncClient client = clientWithCredential(StubBackend.EXPIRED_CREDENTIAL, BackendCredential.Type.SERVICE_ACCOUNT)) {
             assertCredentialRequired(call(client, "search_tickets", Map.of("queue", "IT", "text", "printer")));
         }
     }
@@ -88,7 +91,8 @@ class SearchTicketsToolTest extends ServerTestSupport {
             }
             for (String text : new String[] {"   ", "a\u0000b", "a\u202Eb"}) {
                 assertThat(text(call(client, "search_tickets", Map.of("queue", "IT", "text", text))))
-                        .as("passes the schema, stopped by the tool").contains("\"error\":\"invalid_argument\"", "text must");
+                        .as("blank text passes the schema and is stopped by the tool, control characters by the starter")
+                        .contains("\"error\":\"invalid_argument\"");
             }
             assertInvalidArgument(call(client, "search_tickets", Map.of("text", "printer")), "");
             assertInvalidArgument(call(client, "search_tickets", Map.of("queue", "IT", "text", "x", "jql", "1=1")), "");

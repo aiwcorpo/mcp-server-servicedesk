@@ -78,6 +78,21 @@ class ServicedeskApiTest {
     }
 
     @Test
+    void overlappingNoteFieldsStopTheStart() {
+        ServicedeskApiProperties props = reference();
+        ServicedeskApiProperties.Note note = props.note();
+        // The body pointer is /body and /visibility is already a static field.
+        for (String pointer : new String[] {"/body", "/body/text", "/visibility/level"}) {
+            ServicedeskApiProperties.Note overlapping = new ServicedeskApiProperties.Note(note.path(), note.method(),
+                    note.bodyPointer(), List.of(new ServicedeskApiProperties.StaticField("/visibility", "\"internal\""),
+                            new ServicedeskApiProperties.StaticField(pointer, "true")), note.idPointer());
+            assertThatThrownBy(() -> new ServicedeskApi("https://sd.internal", new ServicedeskApiProperties(
+                    props.credentialHeader(), props.ticketPath(), props.search(), overlapping, props.fields()), MAPPER))
+                    .isInstanceOf(IllegalStateException.class).hasMessageContaining("note.static-fields");
+        }
+    }
+
+    @Test
     void credentialGoesToTheConfiguredHeader() {
         BackendCredential key = new BackendCredential(BackendCredential.Scheme.API_KEY, "k-123",
                 BackendCredential.Type.SERVICE_ACCOUNT);
