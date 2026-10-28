@@ -11,6 +11,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.IntStream;
 import org.junit.jupiter.api.Test;
+import pl.aiwcorpo.mcp.platform.text.UntrustedText;
 import pl.aiwcorpo.mcp.servicedesk.core.domain.CredentialMode;
 import pl.aiwcorpo.mcp.servicedesk.core.domain.QueueAccessPolicy;
 import pl.aiwcorpo.mcp.servicedesk.core.domain.Ticket;
@@ -101,11 +102,11 @@ class ServicedeskServiceTest {
     }
 
     private static Ticket ticket(String id, String queue) {
-        return new Ticket(id, queue, "subject", "open", null, null, null, null);
+        return new Ticket(id, queue, UntrustedText.plain("subject", 100), "open", null, null, null, null);
     }
 
     private static TicketSummary summary(String id, String queue) {
-        return new TicketSummary(id, queue, "subject", "open", null);
+        return new TicketSummary(id, queue, UntrustedText.plain("subject", 100), "open", null);
     }
 
     private static final class FakeServiceDesk implements ServicedeskResourcePort {

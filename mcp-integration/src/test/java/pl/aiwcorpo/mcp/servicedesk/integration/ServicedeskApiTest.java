@@ -120,6 +120,9 @@ class ServicedeskApiTest {
         assertInvalid("", ok, "base-url");
         assertInvalid("ftp://sd.internal", ok, "base-url");
         assertInvalid("http://sd.internal?token=1", ok, "base-url");
+        assertInvalid("http://sd.internal?", ok, "base-url");
+        assertInvalid("https://sd.internal/api#frag", ok, "base-url");
+        assertInvalid("https://sd.internal/api?x=1#frag", ok, "base-url");
         assertInvalid("http://sd.internal", new ServicedeskApiProperties(null, ok.ticketPath(),
                 new ServicedeskApiProperties.Search("/search", "", "q", null, null), ok.note(), ok.fields()),
                 "queue-param");

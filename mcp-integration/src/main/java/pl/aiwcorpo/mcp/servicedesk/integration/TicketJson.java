@@ -3,6 +3,7 @@ package pl.aiwcorpo.mcp.servicedesk.integration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import pl.aiwcorpo.mcp.platform.text.UntrustedText;
 import pl.aiwcorpo.mcp.servicedesk.core.domain.Identifiers;
 import pl.aiwcorpo.mcp.servicedesk.core.domain.Ticket;
 import pl.aiwcorpo.mcp.servicedesk.core.domain.TicketSummary;
@@ -10,7 +11,7 @@ import tools.jackson.databind.JsonNode;
 
 /**
  * Reads tickets out of the service desk's JSON with the configured pointers. Only the mapped fields leave this
- * class; free text is converted to plain text and capped. A ticket whose id or queue is missing or not a valid
+ * class; free text is converted to plain text, normalized and cut to its limit. A ticket whose id or queue is missing or not a valid
  * identifier is treated as not visible: without a trustworthy queue no access decision can be made.
  */
 final class TicketJson {
@@ -46,9 +47,9 @@ final class TicketJson {
         if (!Identifiers.isTicketId(ticketId) || !Identifiers.isQueueId(queueId)) {
             return Optional.empty();
         }
-        return Optional.of(new Ticket(ticketId, queueId, text(node, subject, SUBJECT_MAX), text(node, status, SHORT_MAX),
-                text(node, priority, SHORT_MAX), text(node, created, SHORT_MAX), text(node, updated, SHORT_MAX),
-                text(node, description, DESCRIPTION_MAX)));
+        return Optional.of(new Ticket(ticketId, queueId, untrusted(node, subject, SUBJECT_MAX),
+                field(node, status, SHORT_MAX), field(node, priority, SHORT_MAX), field(node, created, SHORT_MAX),
+                field(node, updated, SHORT_MAX), untrusted(node, description, DESCRIPTION_MAX)));
     }
 
     List<TicketSummary> summaries(JsonNode hits, int max) {
@@ -63,8 +64,8 @@ final class TicketJson {
             String ticketId = scalar(hit.at(id));
             String queueId = scalar(hit.at(queue));
             if (Identifiers.isTicketId(ticketId) && Identifiers.isQueueId(queueId)) {
-                result.add(new TicketSummary(ticketId, queueId, text(hit, subject, SUBJECT_MAX),
-                        text(hit, status, SHORT_MAX), text(hit, updated, SHORT_MAX)));
+                result.add(new TicketSummary(ticketId, queueId, untrusted(hit, subject, SUBJECT_MAX),
+                        field(hit, status, SHORT_MAX), field(hit, updated, SHORT_MAX)));
             }
         }
         return result;
@@ -78,10 +79,11 @@ final class TicketJson {
         return node.asString();
     }
 
-    private static String text(JsonNode node, String pointer, int max) {
-        if (pointer.isEmpty()) {
-            return null;
-        }
-        return PlainText.of(scalar(node.at(pointer)), max);
+    private static UntrustedText untrusted(JsonNode node, String pointer, int max) {
+        return pointer.isEmpty() ? null : PlainText.untrusted(scalar(node.at(pointer)), max);
+    }
+
+    private static String field(JsonNode node, String pointer, int max) {
+        return pointer.isEmpty() ? null : PlainText.field(scalar(node.at(pointer)), max);
     }
 }

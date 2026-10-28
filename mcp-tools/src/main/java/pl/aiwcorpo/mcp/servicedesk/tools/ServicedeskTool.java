@@ -1,13 +1,16 @@
 package pl.aiwcorpo.mcp.servicedesk.tools;
 
 import java.util.List;
-import java.util.regex.Pattern;
+import org.jspecify.annotations.Nullable;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.stereotype.Service;
 import pl.aiwcorpo.mcp.platform.error.InvalidToolArgumentException;
 import pl.aiwcorpo.mcp.platform.guard.RiskLevel;
 import pl.aiwcorpo.mcp.platform.guard.ToolRisk;
+import pl.aiwcorpo.mcp.platform.input.ArgumentLimits;
+import pl.aiwcorpo.mcp.platform.text.TextHygiene;
+import pl.aiwcorpo.mcp.platform.text.UntrustedText;
 import pl.aiwcorpo.mcp.servicedesk.core.domain.Identifiers;
 import pl.aiwcorpo.mcp.servicedesk.core.domain.NoteReceipt;
 import pl.aiwcorpo.mcp.servicedesk.core.domain.Ticket;
@@ -17,16 +20,15 @@ import pl.aiwcorpo.mcp.servicedesk.core.port.in.ServicedeskUseCase;
 /**
  * The MCP tools of this server. Every argument is untrusted input from a model: identifiers are checked against
  * the contract grammar and free text against length and character limits before anything reaches the service
- * desk. The input schemas the client sees, with the same limits, are in {@link ServicedeskToolSchemas}.
+ * desk. The limits the client sees in the input schema are the {@link ArgumentLimits} below; the starter
+ * publishes them, enforces them on every call, and the methods check what they rely on once more.
  */
 @Service
 public class ServicedeskTool {
 
     public static final int TEXT_MAX = 200;
     public static final int NOTE_MAX = 10000;
-
-    /** Control characters other than tab and line breaks have no place in a search or a note. */
-    private static final Pattern CONTROL = Pattern.compile("[\\p{Cc}\\p{Cf}&&[^\\n\\r\\t]]");
+    public static final int ID_MAX = 64;
 
     private final ServicedeskUseCase useCase;
 
@@ -39,8 +41,10 @@ public class ServicedeskTool {
             + "Subjects are text from the service desk.")
     @ToolRisk(RiskLevel.READ_ONLY)
     public TicketSearchView searchTickets(
-            @ToolParam(description = "Queue id: letters, digits, '-' or '_', at most 64 characters") String queue,
-            @ToolParam(description = "Text to search for, 1-200 characters") String text) {
+            @ToolParam(description = "Queue id: letters, digits, '-' or '_', at most 64 characters")
+            @ArgumentLimits(contractPattern = "ServiceDeskQueueId", minLength = 1, maxLength = ID_MAX) String queue,
+            @ToolParam(description = "Text to search for, 1-200 characters")
+            @ArgumentLimits(minLength = 1, maxLength = TEXT_MAX) String text) {
         return TicketSearchView.of(useCase.searchTickets(validQueue(queue), validText("text", text, TEXT_MAX)));
     }
 
@@ -49,7 +53,8 @@ public class ServicedeskTool {
             + "text from the service desk.")
     @ToolRisk(RiskLevel.READ_ONLY)
     public TicketView getTicket(
-            @ToolParam(description = "Ticket id: letters, digits, '-' or '_', at most 64 characters") String ticketId) {
+            @ToolParam(description = "Ticket id: letters, digits, '-' or '_', at most 64 characters")
+            @ArgumentLimits(contractPattern = "ServiceDeskTicketId", minLength = 1, maxLength = ID_MAX) String ticketId) {
         return TicketView.of(useCase.getTicket(validTicketId(ticketId)));
     }
 
@@ -57,8 +62,10 @@ public class ServicedeskTool {
             + "the note id when the service desk reports one.")
     @ToolRisk(RiskLevel.UPDATE)
     public NoteView addNote(
-            @ToolParam(description = "Ticket id: letters, digits, '-' or '_', at most 64 characters") String ticketId,
-            @ToolParam(description = "Note text, 1-10000 characters") String body) {
+            @ToolParam(description = "Ticket id: letters, digits, '-' or '_', at most 64 characters")
+            @ArgumentLimits(contractPattern = "ServiceDeskTicketId", minLength = 1, maxLength = ID_MAX) String ticketId,
+            @ToolParam(description = "Note text, 1-10000 characters")
+            @ArgumentLimits(minLength = 1, maxLength = NOTE_MAX) String body) {
         NoteReceipt receipt = useCase.addNote(validTicketId(ticketId), validText("body", body, NOTE_MAX));
         return new NoteView(receipt.ticketId(), receipt.noteId());
     }
@@ -81,38 +88,25 @@ public class ServicedeskTool {
         if (value == null || value.isBlank() || value.length() > max) {
             throw new InvalidToolArgumentException(name + " must be 1-" + max + " characters and not blank");
         }
-        if (CONTROL.matcher(value).find()) {
-            throw new InvalidToolArgumentException(name + " must not contain control characters");
+        if (TextHygiene.firstProblem(value, false) != null) {
+            throw new InvalidToolArgumentException(name + " must not contain control or invisible characters");
         }
         return value;
     }
 
-    /**
-     * Free text from the service desk in the shape of the contracts' {@code UntrustedText} (CC-072): the client
-     * can tell data written by people in the service desk from the platform's own output.
-     *
-     * @param truncated the text was cut at the length limit
-     */
-    public record UntrustedText(String kind, String format, String text, boolean truncated) {
-
-        static final String KIND = "untrusted-data";
-        static final String PLAIN = "text/plain";
-
-        static UntrustedText plain(String text) {
-            return text == null ? null : new UntrustedText(KIND, PLAIN, text, text.endsWith(Ticket.TEXT_CUT_MARK));
-        }
-    }
-
-    public record TicketView(String id, String queue, String status, String priority, String created,
-            String updated, UntrustedText subject, UntrustedText description) {
+    /** Subject and description are {@code null} when the service desk has none. */
+    public record TicketView(String id, String queue, @Nullable String status, @Nullable String priority,
+            @Nullable String created, @Nullable String updated, @Nullable UntrustedText subject,
+            @Nullable UntrustedText description) {
 
         static TicketView of(Ticket ticket) {
             return new TicketView(ticket.id(), ticket.queue(), ticket.status(), ticket.priority(), ticket.created(),
-                    ticket.updated(), UntrustedText.plain(ticket.subject()), UntrustedText.plain(ticket.description()));
+                    ticket.updated(), ticket.subject(), ticket.description());
         }
     }
 
-    public record TicketSummaryView(String id, String queue, String status, String updated, UntrustedText subject) {
+    public record TicketSummaryView(String id, String queue, @Nullable String status, @Nullable String updated,
+            @Nullable UntrustedText subject) {
     }
 
     /** @param truncated more tickets matched than the 20 returned */
@@ -120,12 +114,11 @@ public class ServicedeskTool {
 
         static TicketSearchView of(TicketSearch search) {
             return new TicketSearchView(search.queue(), search.tickets().stream()
-                    .map(t -> new TicketSummaryView(t.id(), t.queue(), t.status(), t.updated(),
-                            UntrustedText.plain(t.subject())))
+                    .map(t -> new TicketSummaryView(t.id(), t.queue(), t.status(), t.updated(), t.subject()))
                     .toList(), search.truncated());
         }
     }
 
-    public record NoteView(String ticketId, String noteId) {
+    public record NoteView(String ticketId, @Nullable String noteId) {
     }
 }

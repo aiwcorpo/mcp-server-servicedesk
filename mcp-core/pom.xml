@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  mcp-core: domain and ports, plain Java. No Spring and no MCP here, so business rules stay testable
-  without the transport and the framework.
+  mcp-core: domain and ports. No Spring beans and no MCP transport here, so business rules stay testable
+  without them; the starter is a dependency only for the shared result type UntrustedText and for the
+  contracts on the classpath (identifier patterns).
 -->
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -15,6 +16,10 @@
     <artifactId>mcp-core</artifactId>
     <name>mcp-servicedesk :: Core (domain + ports)</name>
     <dependencies>
+        <dependency>
+            <groupId>pl.aiwcorpo.mcp</groupId>
+            <artifactId>mcp-platform-starter</artifactId>
+        </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>

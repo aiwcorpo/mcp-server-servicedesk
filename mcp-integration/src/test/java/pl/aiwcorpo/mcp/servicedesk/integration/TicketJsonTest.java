@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import pl.aiwcorpo.mcp.platform.text.UntrustedText;
 import pl.aiwcorpo.mcp.servicedesk.core.domain.Ticket;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -23,8 +24,8 @@ class TicketJsonTest {
                  "description":"<p>Paper jam</p><script>alert(1)</script>","requesterEmail":"a@corp.internal"}
                 """)).orElseThrow();
 
-        assertThat(ticket).isEqualTo(new Ticket("IT-1", "IT", "Printer", "open", "P3", "2026-10-01T08:00:00Z",
-                "2026-10-02T08:00:00Z", "Paper jam"));
+        assertThat(ticket).isEqualTo(new Ticket("IT-1", "IT", UntrustedText.plain("Printer", 100), "open", "P3",
+                "2026-10-01T08:00:00Z", "2026-10-02T08:00:00Z", UntrustedText.plain("Paper jam", 100)));
     }
 
     @Test
@@ -41,7 +42,7 @@ class TicketJsonTest {
         assertThat(ticket.id()).isEqualTo("10042");
         assertThat(ticket.queue()).isEqualTo("7");
         assertThat(ticket.status()).isEqualTo("Waiting for support");
-        assertThat(ticket.description()).isEqualTo("Cannot\nconnect");
+        assertThat(ticket.description().text()).isEqualTo("Cannot\nconnect");
         assertThat(ticket.priority()).isNull();
     }
 
