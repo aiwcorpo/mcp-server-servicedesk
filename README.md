@@ -1,7 +1,7 @@
 # mcp-servicedesk: serwer MCP platformy
 
-Serwer MCP dla service desku, zbudowany na `mcp-platform-starter` 3.0.0-alpha-11 (Java 25, Spring Boot 4.1.0,
-Spring AI 2.0.0, kontrakty `mcp-contracts` 2.1.1). Stoi wyłącznie za gateway'em platformy: przyjmuje ruch tylko
+Serwer MCP dla service desku, zbudowany na `mcp-platform-starter` 3.0.0-alpha-14 (Java 25, Spring Boot 4.1.0,
+Spring AI 2.0.0, kontrakty `mcp-contracts` 2.2.5). Stoi wyłącznie za gateway'em platformy: przyjmuje ruch tylko
 po mTLS z wewnętrznym JWT gateway'a (C2), a do service desku woła z poświadczeniem, które gateway dołącza do
 każdego żądania (C3). Bez poprawnego JWT odpowiada 401, nie ma trybu anonimowego.
 
@@ -48,7 +48,7 @@ zasobu (projekt, klasyfikacja) pochodzą z systemu.
 | `add_note` | `UPDATE` | `mcp-servicedesk-write` | jw. | `ticketId`, `body` 1-10000 znaków | `{ticketId, noteId}` (`noteId` null, gdy system go nie zwraca) |
 
 Klient widzi nazwy z prefiksem `servicedesk__` (dokłada go gateway, C5). Wzorce identyfikatorów są z
-`mcp-contracts` 2.1.1, czytane z kontraktu (`^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`), te same w `inputSchema`, w walidacji narzędzia, w
+`mcp-contracts` 2.2.5, czytane z kontraktu (`^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`), te same w `inputSchema`, w walidacji narzędzia, w
 konfiguracji kolejek i przy wartościach zwracanych przez system.
 
 Błędy (C10): `not_found_or_denied` z jednym tekstem dla zgłoszenia lub kolejki nieistniejącej, ukrytej przez
