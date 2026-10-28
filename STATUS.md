@@ -2,6 +2,8 @@
 
 M1: osiągnięty (2026-10-27, runda 2; 2026-10-28 przeniesiony na starter 3.0.0-alpha-10) - `search_tickets`, `get_ticket`, `add_note` na generycznym adapterze REST (D10); konto serwisowe fail-closed (tylko kolejki z konfiguracji, pusta lista = odmowa), notatki z autorem zlecenia, walidacja argumentów w starterze (C10 + C8), zmiany template'u od 7f65f8f przeniesione, 84 testy na stubie.
 
+M3: osiągnięty (2026-10-28) - starter 3.0.0-beta-2 (kontrakty 3.1.0): `@ToolTitle`, `@ResourceRef` + `ResourceResolver` dla `ServiceDesk::Queue` i `ServiceDesk::Ticket` (klasyfikacja kolejki z systemu, brak klasyfikacji = nie tajne), wyszukiwanie ograniczone linkiem i grantami konta serwisowego (`QueryScope`), `ResultFilter` po `@ResourceRef` w trafieniu, paczka polityk i manifest (`GET /mcp-manifest` przechodzi reguły), atrybucja notatki z escapowaniem HTML/Markdown i trzema formami frazy bez zmian, 119 testów.
+
 Start: wygenerowany z `mcp-server-template` 7f65f8f (`./new-server.sh servicedesk`), pierwszy commit to stan
 bez zmian. Starter: BOM `pl.aiwcorpo.mcp:mcp-platform-bom:3.0.0-alpha-11` (kontrakty 2.1.1). M2 nie jest
 zaczęty.
@@ -88,16 +90,6 @@ mcp-core 6, mcp-tools 3). Uruchomienie wg README: `dev` na 18530, health 200, `P
   `mcp-platform-dev`, Redis 16379): start, `/actuator/health` po mTLS z certyfikatem gateway'a 200, `POST /mcp`
   bez JWT 401, bez certyfikatu klienta handshake zerwany. Proces zatrzymany.
 
-## Miejsce na QueryScope i ResultFilter (beta, M3)
-
-Jedno miejsce: `QueueAccessPolicy` (mcp-core), wołana z `ServicedeskService`:
-- przed wywołaniem systemu z kolejką (`search_tickets`: `permits(queue)`; `get_ticket`/`add_note`:
-  `servesAnyQueue`) -> tu wejdzie `QueryScope` (kolejki z `vsc` i grantów Cedar zawężają dozwolone);
-- na każdym zgłoszeniu zwróconym przez system (`visibleTicket`, filtr wyników w `searchTickets`) -> tu wejdzie
-  `ResultFilter`/ocena `ServiceDesk::Ticket in ServiceDesk::Queue` z `forResource`.
-`@ResourceRef`: `queue` -> `ServiceDesk::Queue`, `ticketId` -> `ServiceDesk::Ticket` (rodzic z odpowiedzi
-systemu); resolver obok adaptera w mcp-integration.
-
 ## Odstępstwa
 
 - Stuby zamiast mocka z ws-01: brief chce testów na mockach ws-01, mocka service desku nie ma. `StubBackend`
@@ -110,7 +102,6 @@ systemu); resolver obok adaptera w mcp-integration.
 - Limity w opisach narzędzi są stałe (20 trafień), bo opis wchodzi do `definitionHash`.
 - Tekst wyszukiwania idzie jako wartość parametru; jeśli wybrany produkt traktuje ten parametr jako język
   zapytań (np. JQL/AQL), adapter musi dostać escapowanie właściwe dla produktu. Do sprawdzenia przy D10.
-- Manifest C6, `@ResourceRef`, `ResultFilter`, Cedar: M2/M3, nie zaczęte.
 
 ## Czego potrzebuje ws-01
 
@@ -161,3 +152,66 @@ Dopisane na końcu `mcp-contracts/CONTRACT_CHANGES.md` (status open, bez commitu
 ## Runda 5: starter alpha-11 (2026-10-28)
 
 BOM alpha-10 -> alpha-11 (MIGRATION-3.0.md, sekcja "Zmiany w 3.0.0-alpha-11"). `DevProfileLoopbackTest` sprawdza regułę guarda przez `DevProfileGuardAssertions.assertDevProfileLoopbackRule()` (A10-M1), więc przechodzi także w kontenerze CI. `./mvnw clean verify`: 95 testów, 0 błędów; `INVOCATION_ID=ci ./mvnw -B verify`: bez różnic. Start lokalny w profilu `dev`: health 200, POST /mcp bez JWT 401.
+
+## M3 (2026-10-28)
+
+Kamienie pośrednie: (1) alpha-12..14 (commit `b5a8328`), (2) beta-2 z resolverami, zakresem wyszukiwania, paczką
+polityk i manifestem (commit `03c3674`), (3) README, STATUS, obraz.
+
+Przejście: `3.0.0-alpha-11` -> alpha-12, alpha-13, alpha-14 (każdy zielony osobno; `DevProfileLoopbackTest` zastąpiony
+wersją sprawdzającą kontekst serwera; brak wykluczeń platformy w repo) -> beta-2 bezpośrednio (beta-1 nie buduje się
+bez tytułów i paczki, więc listy "Z alpha-14 na beta-1" i "Z beta-1 na beta-2" wykonane razem).
+
+| Punkt MIGRATION | Status |
+| --- | --- |
+| `@ToolTitle` (polski), zamknięty i ograniczony schemat | zrobione; schemat z `SchemaLimitedToolCallbacks`, `ManifestTest.everyToolHasAPolishTitle` |
+| `policy.*`, `manifest.*` | `application.yml` (URL, id klucza, plik klucza, `state-dir` z env), `application-dev.yml` (paczka z `:18747`, klucz z `mcp-policies/keys/dev`, `allow-test-keys` tylko tu); env template i `StateDirectory` w jednostce systemd |
+| `@ResourceRef` + resolwery | `queue` w `search_tickets`, `ticketId` w `get_ticket` i `add_note`; `ServicedeskQueueResolver`, `ServicedeskTicketResolver` (zgłoszenie opisane razem z bieżącą kolejką i jej klasyfikacją) |
+| `QueryScope` / `StructuredQuery` | patrz "Odstępstwa" |
+| Kształt wyniku śledzony | `TicketSummaryView.id` ma `@ResourceRef`; rekordy bez `Map`/Jacksona |
+| Obraz bez Alpine | Dockerfile na `eclipse-temurin:25-jre` (cedar-java, glibc) |
+| Higiena tekstu, `mentionFiltered` | `add_note.body` nie jest filtrowane wzmianek (service desk nie zamienia `@nazwa` w powiadomienie wg dostępnej wiedzy; do potwierdzenia przy D10) |
+
+Weryfikacja: `./mvnw -B clean verify` (JDK 25) -> 119 testów, 0 błędów (core 6, application 10, integration 29,
+tools 2, app 72). Start profilu `dev` na 18790 z prawdziwą paczką ws-09 (`:18747`): `policy_bundle_loaded`,
+`manifest_ready tools=3`, health 200, `POST /mcp` bez JWT 401; proces zatrzymany.
+
+## Odstępstwa M3
+
+- Wyszukiwanie nie używa `StructuredQuery`/`includeGrants`: te działają tylko dla JQL i CQL (`QueryScope.jql`,
+  `.cql`), a ten adapter wywołuje REST z kolejką w ścieżce i parametrem tekstu, który adapter koduje jako wartość.
+  Zakres jest więc stosowany do jedynego wyboru modelu, kolejki (`ServicedeskSearchScope`): link (`linkIds()`) i, dla
+  konta serwisowego, `grantedIds()`; brak grantów (`grantsNothing()`) = pusty wynik i zero zapytań. Model nie podaje
+  zapytania.
+- `queue` w `search_tickets` jest `@ResourceRef` (brief), a template ma tu zwykły argument (pusty wynik poza linkiem
+  zamiast błędu). Skutek: kolejka poza linkiem daje `access_denied` z reguły wywołania paczki kontraktów
+  (`vs-narrow-call-servicedesk-queue`), a restricted, nieistniejąca i spoza listy serwera `not_found_or_denied`.
+- Grant kolejki dla konta serwisowego sprawdza tylko `search_tickets`. `get_ticket` i `add_note` opierają się na liście
+  serwera i Cedar: przykładowa polityka `servicedesk-read` nie wymaga zakresu (inaczej niż `opensearch-read-in-scope`).
+  Użytkownik z `mcp-servicedesk-read` czyta więc przez konto serwisowe każde zgłoszenie z listy serwera, także z kolejki,
+  której grup nie ma, o ile zna jego id (CC niżej).
+- Nowy endpoint w adapterze: `servicedesk.api.queue` (kolejka z klasyfikacją). Produkt bez takiego zasobu wymaga
+  endpointu zastępczego; bez niego żadne zgłoszenie nie przejdzie resolvera. Koszt: `GET` kolejki raz na kolejkę wyniku
+  i `GET` zgłoszenia na każde trafienie wyszukiwania (brak pobrania zbiorczego w generycznym REST).
+- Kontrola tekstu w `add_note` (puste po przycięciu) działa już po resolverze, więc pusta notatka kosztuje dwa `GET`
+  zanim zostanie odrzucona; nic nie jest zapisywane.
+- Trafienie z nieaktualnego indeksu (zgłoszenie jest w innej, dozwolonej kolejce) zostaje w wyniku z kolejką z
+  indeksu; ocenia je `ResultFilter` po bieżącej kolejce zgłoszenia, wynik pokazuje to, co zwrócił indeks.
+- Tekst odpowiedzi `not_found_or_denied` to tekst startera ("The resource does not exist or you do not have access to
+  it."); wcześniejszy własny tekst zmieniony na ten sam, żeby wszystkie odmowy były identyczne.
+- `docs/jak-napisac-narzedzie.md` nie odświeżony z template'u beta-2 (template w trakcie zmian); README opisuje
+  rzeczywiste klasy.
+- Testy używają własnej paczki (`TestPolicyBundle`): paczka przykładowa kontraktów nie ma reguły `call`/`update` dla
+  narzędzia `UPDATE` service desku, więc `add_note` kończyłby się `access_denied`.
+
+## Propozycje CC (M3)
+
+- `CC-???` (C7 / ws-09): przykładowa paczka (`cedar/examples`) nie ma `servicedesk-call-update` ani `servicedesk-update`;
+  narzędzie `add_note` jest w niej nieosiągalne. Dopisać reguły dla grupy `mcp-servicedesk-write`.
+- `CC-???` (C7): `servicedesk-read` powinno, jak `opensearch-read-in-scope`, wymagać `principal in resource.scopes`, gdy
+  poświadczenie to konto serwisowe (granty kolejek obowiązują wtedy w `get_ticket` i `add_note`, nie tylko w wyszukiwaniu).
+  Cedar nie widzi typu poświadczenia; potrzebny atrybut kontekstu albo osobna grupa/akcja.
+- `CC-???` (C7 / entity-builder): opisać atrybut klasyfikacji kolejki dla generycznego adaptera (źródło, format: napis
+  czy lista), bo dziś "kategoria kolejki w adapterze service desku" nie wskazuje, skąd ją brać.
+- `CC-???` (C9): `access_denied` zamiast `not_found_or_denied` dla kolejki z argumentu poza linkiem (reguła wywołania)
+  ujawnia, że kolejka istnieje poza linkiem; rozważyć ujednolicenie.

@@ -1,7 +1,7 @@
 # mcp-servicedesk: serwer MCP platformy
 
-Serwer MCP dla service desku, zbudowany na `mcp-platform-starter` 3.0.0-alpha-14 (Java 25, Spring Boot 4.1.0,
-Spring AI 2.0.0, kontrakty `mcp-contracts` 2.2.5). Stoi wyłącznie za gateway'em platformy: przyjmuje ruch tylko
+Serwer MCP dla service desku, zbudowany na `mcp-platform-starter` 3.0.0-beta-2 (Java 25, Spring Boot 4.1.0,
+Spring AI 2.0.0, kontrakty `mcp-contracts` 3.1.0). Stoi wyłącznie za gateway'em platformy: przyjmuje ruch tylko
 po mTLS z wewnętrznym JWT gateway'a (C2), a do service desku woła z poświadczeniem, które gateway dołącza do
 każdego żądania (C3). Bez poprawnego JWT odpowiada 401, nie ma trybu anonimowego.
 
@@ -29,30 +29,32 @@ JWKS z kluczy testowych kontraktów i podpisuje wewnętrzne JWT, a `StubBackend`
 
 | Moduł | Co w nim jest | W tym serwerze |
 | --- | --- | --- |
-| `mcp-core` | domena i porty | `Ticket`, `TicketSummary`, `TicketSearch`, `NoteReceipt`, `TicketNotFoundException`, `Identifiers` (wzorce z kontraktu), `QueueAccessPolicy` + `CredentialMode` (granica kolejek), porty `ServicedeskUseCase` i `ServicedeskResourcePort` |
-| `mcp-application` | przypadki użycia (bez Springa) | `ServicedeskService`: kontrola kolejki przed i po wywołaniu systemu, filtr wyników wyszukiwania |
-| `mcp-integration` | adaptery wyjściowe do systemu | `ServicedeskResourceAdapter` (REST, poświadczenie z C3, timeouty, bez przekierowań), `ServicedeskApi` + `ServicedeskApiProperties` (kształt API z konfiguracji, walidowany przy starcie), `TicketJson` (pola przez JSON pointer), `PlainText` (HTML -> tekst) |
-| `mcp-tools` | narzędzia MCP, powierzchnia publiczna | `ServicedeskTool` (`search_tickets`, `get_ticket`, `add_note`; limity i wzorce kontraktu w `@ArgumentLimits`), `ServicedeskToolErrors` |
+| `mcp-core` | domena i porty | `Ticket`, `Queue`, `ClassifiedTicket`, `ServicedeskResourceModel`, `TicketSummary`, `TicketSearch`, `NoteReceipt`, `TicketNotFoundException`, `Identifiers` (wzorce z kontraktu), `QueueAccessPolicy` + `CredentialMode` (granica kolejek), porty `ServicedeskUseCase` i `ServicedeskResourcePort` |
+| `mcp-application` | przypadki użycia (bez Springa) | `ServicedeskService`: kontrola kolejki przed i po wywołaniu systemu, wyszukiwanie ticketów i kolejek dla resolverów, filtr wyników wyszukiwania |
+| `mcp-integration` | adaptery wyjściowe do systemu | `ServicedeskResourceAdapter` (REST, poświadczenie z C3, timeouty, bez przekierowań), `ServicedeskApi` + `ServicedeskApiProperties` (kształt API z konfiguracji, walidowany przy starcie), `TicketJson` (pola przez JSON pointer), `PlainText` (HTML -> tekst), `ServicedeskQueueResolver` i `ServicedeskTicketResolver` (`ResourceResolver` dla `ServiceDesk::Queue` i `ServiceDesk::Ticket`) |
+| `mcp-tools` | narzędzia MCP, powierzchnia publiczna | `ServicedeskTool` (`search_tickets`, `get_ticket`, `add_note`; limity i wzorce kontraktu w `@ArgumentLimits`), `ServicedeskSearchScope` (zakres wyszukiwania z `QueryScope`), `ServicedeskToolErrors` |
 | `mcp-app` | bootstrap, wiring, jedyny jar, testy end-to-end | `McpToolsConfiguration` (lista narzędzi), `ApplicationWiringConfiguration`, `ServicedeskAccessProperties` |
 
 Zależności idą do środka: `mcp-tools` -> `mcp-application` -> `mcp-core` <- `mcp-integration`; `mcp-app` składa
-całość. Resolver zasobów (`@ResourceRef`, starter beta) dojdzie w `mcp-integration` obok adaptera, bo atrybuty
-zasobu (projekt, klasyfikacja) pochodzą z systemu.
+całość. Resolwery zasobów są w `mcp-integration` obok adaptera, bo atrybuty zasobu (kolejka, klasyfikacja)
+pochodzą z systemu.
 
 ## Narzędzia
 
-| Narzędzie | Ryzyko | Uprawnienie (C9) | Poświadczenie | Argumenty | Wynik |
-| --- | --- | --- | --- | --- | --- |
-| `search_tickets` | `READ_ONLY` | `mcp-servicedesk-read` | `service-account` albo `user-secret` (C3) | `queue` (obowiązkowa, wzorzec `ServiceDeskQueueId`), `text` 1-200 znaków | `{queue, tickets[{id, queue, status, updated, subject}], truncated}`, najwyżej 20; `subject` to obiekt z oznaczeniem danych (niżej) |
-| `get_ticket` | `READ_ONLY` | `mcp-servicedesk-read` | jw. | `ticketId` (wzorzec `ServiceDeskTicketId`) | `{id, queue, status, priority, created, updated, subject, description}`; `subject` i `description` to obiekty z oznaczeniem danych (niżej) |
-| `add_note` | `UPDATE` | `mcp-servicedesk-write` | jw. | `ticketId`, `body` 1-10000 znaków | `{ticketId, noteId}` (`noteId` null, gdy system go nie zwraca) |
+| Narzędzie | Tytuł | Ryzyko | Akcja Cedar | Uprawnienie (C9) | Poświadczenie | Argumenty | Wynik |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `search_tickets` | Szukaj zgłoszeń w kolejce | `READ_ONLY` | `read` | `mcp-servicedesk-read` | `service-account` albo `user-secret` (C3) | `queue` (obowiązkowa, wzorzec `ServiceDeskQueueId`, `@ResourceRef` `ServiceDesk::Queue`), `text` 1-200 znaków | `{queue, tickets[{id, queue, status, updated, subject}], truncated}`, najwyżej 20; `subject` to obiekt z oznaczeniem danych (niżej) |
+| `get_ticket` | Pobierz zgłoszenie | `READ_ONLY` | `read` | `mcp-servicedesk-read` | jw. | `ticketId` (wzorzec `ServiceDeskTicketId`, `@ResourceRef` `ServiceDesk::Ticket`) | `{id, queue, status, priority, created, updated, subject, description}`; `subject` i `description` to obiekty z oznaczeniem danych (niżej) |
+| `add_note` | Dodaj notatkę do zgłoszenia | `UPDATE` | `update` | `mcp-servicedesk-write` | jw. | `ticketId` (`@ResourceRef` `ServiceDesk::Ticket`), `body` 1-10000 znaków | `{ticketId, noteId}` (`noteId` null, gdy system go nie zwraca) |
 
 Klient widzi nazwy z prefiksem `servicedesk__` (dokłada go gateway, C5). Wzorce identyfikatorów są z
-`mcp-contracts` 2.2.5, czytane z kontraktu (`^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`), te same w `inputSchema`, w walidacji narzędzia, w
+`mcp-contracts` 3.1.0, czytane z kontraktu (`^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`), te same w `inputSchema`, w walidacji narzędzia, w
 konfiguracji kolejek i przy wartościach zwracanych przez system.
 
-Błędy (C10): `not_found_or_denied` z jednym tekstem dla zgłoszenia lub kolejki nieistniejącej, ukrytej przez
-system (404, 403) i spoza dozwolonych kolejek; `credential_required` przy braku poświadczenia i przy 401 z
+Błędy (C10): `not_found_or_denied` z jednym tekstem (tekst startera) dla zgłoszenia lub kolejki nieistniejącej,
+ukrytej przez system (404, 403), spoza dozwolonych kolejek i `restricted`; `access_denied` bez grupy narzędzia
+(też gdy kolejka z argumentu `search_tickets` leży poza linkiem wirtualnego serwera: tak rozstrzyga reguła
+wywołania w paczce kontraktów); `credential_required` przy braku poświadczenia i przy 401 z
 systemu (także 401 na zapisie notatki); `invalid_argument`; `upstream_unavailable` (system nieosiągalny, 502-504);
 `internal_error` (inne błędy systemu, nieczytelna odpowiedź, przekierowanie, odpowiedź ponad limit rozmiaru).
 Argumenty łamiące `inputSchema` (wzorzec, długość, brak pola, pole nadmiarowe) odrzuca starter jako
@@ -95,16 +97,33 @@ Poświadczenie oznaczone przez gateway jako `service-account` jest zawsze trzyma
 `user-secret` (pomyłka w konfiguracji nie otwiera dostępu). Kolejka jest oceniana na tym, co system zwraca w
 chwili wywołania, nie na tym, co podał model:
 
-- `get_ticket`: pobiera zgłoszenie, sprawdza, że system zwrócił to samo `id` (inne `id`, np. alias albo
-  scalenie, = odmowa) i że jego bieżąca kolejka jest dozwolona; zgłoszenie bez kolejki = odmowa;
-- `add_note`: to samo co `get_ticket`, dopiero potem zapis; przy odmowie nie ma żadnego zapisu;
-- `search_tickets`: kolejka z argumentu musi być dozwolona, zanim pójdzie zapytanie; z wyników zostają tylko
+- `get_ticket`: resolver zgłoszenia pobiera je, sprawdza, że system zwrócił to samo `id` (inne `id`, np. alias albo
+  scalenie, = odmowa) i że jego bieżąca kolejka jest dozwolona (zgłoszenie bez kolejki = odmowa), potem pyta o
+  kolejkę (klasyfikacja); narzędzie czyta ten wynik, bez drugiego wywołania;
+- `add_note`: ten sam resolver przed metodą, potem tylko zapis; przy odmowie nie ma żadnego zapisu;
+- `search_tickets`: kolejka z argumentu jest rozwiązywana (istnienie, klasyfikacja, lista serwera) zanim pójdzie
+  zapytanie; dla konta serwisowego musi być też przyznana grupami wywołującego (`QueryScope.grantedIds()`, odpowiednik
+  `includeGrants`; brak przyznanych kolejek = pusty wynik bez zapytania do systemu), a link wirtualnego serwera zawęża ją dalej; z wyników zostają tylko
   zgłoszenia, które system raportuje w tej kolejce (zgłoszenia przeniesione, a nadal w indeksie, i trafienia
   z innych kolejek odpadają).
 
 Zgłoszenie przeniesione do niedozwolonej kolejki przestaje być dostępne od następnego wywołania. Między
 odczytem a zapisem notatki (dwa wywołania systemu) zostaje okno, w którym zgłoszenie może zmienić kolejkę;
 generyczne REST nie daje warunkowego zapisu (STATUS.md).
+
+## Polityka zasobów
+
+Kolejka i zgłoszenie opisane są dla Cedar tak, jak podaje je system (entity-builder.md): zgłoszenie ma rodzica
+`ServiceDesk::Queue` z kolejki zwróconej teraz przez system, a klasyfikacja zgłoszenia to klasyfikacja kolejki.
+Klasyfikację czyta się z `servicedesk.api.queue.classification-pointer` (napis albo tablica napisów). **Kolejka bez
+klasyfikacji jest traktowana jako niezastrzeżona**: to decyzja człowieka, zostawiona świadomie. Klasyfikacja, której
+nie da się odczytać (obiekt, liczba, tekst z znakami niewidocznymi, ponad 64 znaki), jest błędem, nie brakiem.
+Wyniki wyszukiwania sprawdza `ResultFilter` po `@ResourceRef` w polu `id` trafienia: trafienie, którego zgłoszenie jest
+teraz w kolejce poza linkiem albo `restricted`, znika; licznika z systemu nie ma. Koszt: jedno `GET` zgłoszenia na
+trafienie i jedno `GET` kolejki na kolejkę wyniku (generyczne REST nie ma pobrania zbiorczego).
+
+Paczka polityk (`MCP_POLICY_*`, `GET /mcp-manifest`) jest wymagana poza `dev`; `accepted-credential-types` domyślnie
+`service-account`.
 
 ## Adapter REST
 
@@ -118,6 +137,8 @@ konfiguracja = brak startu.
 | --- | --- | --- |
 | `credential-header` | nagłówek z poświadczeniem: `Authorization` dostaje `<scheme> <value>` z C3, inny nagłówek (np. `X-API-Key`) samą wartość | `Authorization` |
 | `ticket-path` | zgłoszenie, placeholder `{ticketId}` | `/api/v1/tickets/{ticketId}` |
+| `queue.path`, `queue.id-pointer` | kolejka (istnienie i klasyfikacja dla polityki), placeholder `{queue}`; id kolejki w odpowiedzi | `/api/v1/queues/{queue}`, `/id` |
+| `queue.classification-pointer` | klasyfikacja kolejki (napis albo tablica); puste albo brak w odpowiedzi = kolejka niezastrzeżona | `/classification` |
 | `search.path`, `search.queue-param` | wyszukiwanie; kolejka jako `{queue}` w ścieżce albo parametr | `/api/v1/queues/{queue}/tickets` |
 | `search.text-param`, `search.limit-param` | parametr tekstu (wartość, nie język zapytań) i limitu (serwer prosi o 21) | `q`, `limit` |
 | `search.results-pointer` | tablica trafień w odpowiedzi; puste = odpowiedź jest tablicą | `/items` |
@@ -134,6 +155,7 @@ servicedesk:
   api:
     credential-header: X-API-Key
     ticket-path: /rest/requests/{ticketId}
+    queue: {path: /rest/queues/{queue}, id-pointer: /queueId, classification-pointer: /category}
     search: {path: /rest/requests, queue-param: queueId, text-param: searchTerm, limit-param: limit, results-pointer: /values}
     note:
       path: /rest/requests/{ticketId}/comments
@@ -155,8 +177,10 @@ adapter. Przekierowania 3xx nie są śledzone (`internal_error`).
 gateway --mTLS (CN mcp-gateway) + JWT C2 (aud mcp-servicedesk, tool add_note) + X-MCP-Credential(-Type)-->
   starter: InternalJwtFilter (inaczej 401) -> CredentialHeaderFilter -> AuditingToolCallback (C8)
   -> starter: walidacja argumentów względem inputSchema (inaczej C10 invalid_argument + C8)
-  -> ServicedeskTool.addNote: walidacja ticketId i body
-  -> ServicedeskService: QueueAccessPolicy (tryb + typ poświadczenia), GET zgłoszenia, kontrola id i kolejki
+  -> starter: Cedar `call` na narzędziu, potem resolver `@ResourceRef`: ServicedeskTicketResolver ->
+     ServicedeskService (QueueAccessPolicy: tryb + typ poświadczenia, GET zgłoszenia, kontrola id i kolejki,
+     GET kolejki) -> Cedar `update` na zgłoszeniu opisanym przez system (inaczej not_found_or_denied)
+  -> ServicedeskTool.addNote: walidacja body
   -> ServicedeskResourceAdapter: CredentialContext.require("servicedesk"), POST notatki
 ```
 
@@ -179,6 +203,8 @@ błędem, `/actuator/prometheus` nie jest wystawiony.
 | `MCP_SERVICEDESK_SSL_BUNDLE` | bundle SSL dla HTTPS systemu, np. `mcp-internal-ca`; puste = zaufanie JDK | puste |
 | `MCP_SERVICEDESK_CREDENTIAL_MODE` | `service-account` albo `user-secret` (sekcja "Granica kolejek") | `service-account` |
 | `MCP_SERVICEDESK_ALLOWED_QUEUES` | dozwolone kolejki, po przecinku; w trybie `service-account` bez nich wszystko jest odmawiane | puste |
+| `MCP_POLICY_URL`, `MCP_POLICY_KEY_ID`, `MCP_POLICY_PUBLIC_KEY_FILE`, `MCP_POLICY_STATE_DIR` | podpisana paczka polityk (to samo, co ocenia gateway): adres `latest.json`, id i klucz publiczny Ed25519 (SPKI PEM), katalog stanu instancji (ostatnia przyjęta rewizja); bez paczki w 30 s serwer nie wstaje | wymagane |
+| `MCP_INTERNAL_URL`, `MCP_ACCEPTED_CREDENTIAL_TYPES` | adres serwera i przyjmowane typy poświadczeń w manifeście (`GET /mcp-manifest`) | wymagane, `service-account` |
 | `MCP_REDIS_HOST`, `MCP_REDIS_PORT`, `MCP_REDIS_USER`, `MCP_REDIS_PASSWORD` | Redis dla jednorazowego `jti` (użytkownik ACL `mcp-servicedesk`, klucze `jti:mcp-servicedesk:*`) | `localhost`, `6379`, `mcp-servicedesk`, puste |
 | `MCP_PORT`, `MCP_BIND` | port i adres nasłuchu | `8443`, `0.0.0.0` |
 
@@ -259,7 +285,7 @@ hosta (`mcp-gateway/scripts/run-dev-host.sh`, JWKS na `localhost:18445`) skonfig
 
 ## Testy
 
-`./mvnw verify` (JDK 25, bez Dockera): 79 testów.
+`./mvnw verify` (JDK 25, bez Dockera): 119 testów.
 
 | Klasa | Co sprawdza |
 | --- | --- |
@@ -267,17 +293,19 @@ hosta (`mcp-gateway/scripts/run-dev-host.sh`, JWKS na `localhost:18445`) skonfig
 | `GetTicketToolTest` | poświadczenie z C3 dociera do systemu; HTML i pola dodatkowe nie wychodzą; brak poświadczenia i 401; 404 = 403; złe `ticketId` (także pole nadmiarowe) nie docierają do systemu; poświadczenie i treść błędu systemu nie trafiają do wyniku ani logu; nieczytelna odpowiedź, przekierowanie, timeout i odpowiedź ponad limit; nazwa argumentu z fałszywą linią audytu daje `invalid_argument`, zdarzenie C8 i żadnej sfałszowanej linii w logu |
 | `AddNoteToolTest` | odczyt zgłoszenia, potem POST z notatką wewnętrzną i linią o zleceniodawcy; `UPDATE` bez `readOnlyHint`/`destructiveHint`; brak poświadczenia, 401 na odczycie i na zapisie; 404, 403 i 403 na zapisie dają ten sam błąd; złe argumenty |
 | `QueueBoundaryTest` | konto serwisowe: zgłoszenie z innej kolejki, alias, bez kolejki, 403 i nieistniejące dają bajtowo ten sam błąd w `get_ticket` i `add_note`, bez żadnego zapisu; zgłoszenie przeniesione z dozwolonej kolejki przestaje być dostępne (także w wyszukiwaniu z nieaktualnym indeksem), przeniesione do dozwolonej jest dostępne; wyszukiwanie w niedozwolonej kolejce (także `it` zamiast `IT`) nie dociera do systemu; poświadczenie użytkownika nie poszerza trybu `service-account` |
+| `ResourcePolicyTest` | zgłoszenie w kolejce `restricted`, przeniesione do niej i z kolejki spoza zakresu konta serwisowego = `not_found_or_denied` bajtowo jak nieistniejące (też `add_note`, bez zapisu); `access_denied` bez grupy; link zawęża zgłoszenia i wyniki (`STALE-1`); wyszukiwanie konta serwisowego tylko w kolejkach przyznanych grupami; kolejka bez klasyfikacji nie jest zastrzeżona; awaria systemu to nie odmowa |
+| `ManifestTest` | `GET /mcp-manifest` przechodzi reguły `mcp-manifest`, definicje równe `tools/list` (`definitionHash`), ryzyko, `resourceRefs`, polskie tytuły, 401 bez JWT serwisowego |
 | `NoAllowedQueuesTest` | tryb `service-account` bez listy: każde narzędzie `not_found_or_denied`, zero wywołań systemu |
 | `UserSecretModeTest` | tryb `user-secret`: token użytkownika sięga każdej kolejki, którą pokazuje system; poświadczenie oznaczone `service-account` bez listy jest odrzucane |
-| `ProductionConfigurationTest` | konfiguracja bazowa: `client-auth: need`; backend `http` poza `dev` odrzucony (chyba że jawnie dopuszczony); `dev` na 127.0.0.1 |
+| `ProductionConfigurationTest` | konfiguracja bazowa: `client-auth: need`, paczka polityk i `state-dir` wymagane, bez kluczy testowych; backend `http` poza `dev` odrzucony (chyba że jawnie dopuszczony); `dev` na 127.0.0.1 |
 | `DevProfileLoopbackTest` | `dev` z adresem innym niż pętla zwrotna nie wstaje |
 | `ToolDefinitionsTest` | dokładnie trzy narzędzia z ryzykiem; `inputSchema` zamknięte (`additionalProperties: false`), wzorce z kontraktu, limity długości; opisy bez instrukcji |
 | `GatewayOnlyAccessTest` | bez JWT 401 (`tools/call`, `ping`, `initialize`), JWT innego serwera, innego narzędzia, wariant serwisowy i przeterminowany -> 401; bez JWT tylko health |
 | `ServicedeskServiceTest`, `QueueAccessPolicyTest` | granica kolejek bez Springa |
-| `ServicedeskToolTest` | walidacja w narzędziu bez walidacji schematu przed nią (`InvalidToolArgumentException`) |
+| `ServicedeskToolTest` | walidacja tekstu w narzędziu bez walidacji schematu przed nią (`InvalidToolArgumentException`) |
 | `ServicedeskApiTest`, `TicketJsonTest`, `PlainTextTest` | kodowanie URI, treść notatki, walidacja konfiguracji (także nakładające się pola stałe notatki), dwa różne kształty API, HTML -> tekst (zakodowany tag nie wraca jako znacznik) |
 
-`StubBackend` (test) to serwer HTTP udający service desk w układzie referencyjnym; w `mcp-platform-dev` nie ma
+`TestPolicyBundle` buduje paczkę testową: przykładowe polityki kontraktów plus reguła `UPDATE` dla `add_note` (paczka przykładowa nie ma reguły zapisu dla service desku) i grupy zakresu kolejek. `StubBackend` (test) to serwer HTTP udający service desk w układzie referencyjnym; w `mcp-platform-dev` nie ma
 mocka service desku.
 
 ## Dokumentacja
