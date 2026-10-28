@@ -74,31 +74,51 @@ class ServicedeskServiceTest {
     }
 
     @Test
-    void aNoteIsWrittenWithoutReadingTheTicketAgain() {
-        assertThat(service.addNote("IT-1", "hello").noteId()).isEqualTo("N-1");
+    void aNoteIsWrittenAfterReadingTheTicketOnceMoreAndNotWhenItsQueueIsNoLongerAccepted() {
+        desk.tickets.put("IT-1", ticket("IT-1", "IT"));
+        desk.queues.put("IT", new Queue("IT", null));
+
+        assertThatThrownBy(() -> service.addNote("IT-1", "hello", queue -> false))
+                .isInstanceOf(TicketNotFoundException.class);
+        assertThat(desk.notes).isEmpty();
+        assertThat(service.addNote("IT-1", "hello", queue -> queue.equals("IT")).noteId()).isEqualTo("N-1");
         assertThat(desk.notes).containsExactly("IT-1:hello");
-        assertThat(desk.reads).isZero();
+    }
+
+    @Test
+    void aServiceAccountSearchDropsHitsWhoseCurrentQueueIsRefused() {
+        desk.queues.put("IT", new Queue("IT", null));
+        desk.tickets.put("IT-1", ticket("IT-1", "IT"));
+        desk.tickets.put("IT-2", ticket("IT-2", "IT"));
+        desk.hits = List.of(summary("IT-1", "IT"), summary("IT-2", "IT"));
+
+        assertThat(service.searchTickets("IT", "x", queue -> true).tickets()).hasSize(2);
+        assertThat(service.searchTickets("IT", "x", queue -> false).tickets()).isEmpty();
     }
 
     @Test
     void anEmptyNoteIdBecomesNull() {
+        desk.tickets.put("IT-1", ticket("IT-1", "IT"));
+        desk.queues.put("IT", new Queue("IT", null));
         desk.noteId = "";
 
-        assertThat(service.addNote("IT-1", "hello").noteId()).isNull();
+        assertThat(service.addNote("IT-1", "hello", queue -> true).noteId()).isNull();
     }
 
     @Test
     void searchInADisallowedQueueNeverReachesTheServiceDesk() {
-        assertThatThrownBy(() -> service.searchTickets("FIN", "printer")).isInstanceOf(TicketNotFoundException.class);
+        assertThatThrownBy(() -> service.searchTickets("FIN", "printer", queue -> true)).isInstanceOf(TicketNotFoundException.class);
         assertThat(desk.searches).isEmpty();
     }
 
     @Test
     void searchDropsHitsFromOtherQueuesAndCutsAtTheLimit() {
+        desk.queues.put("IT", new Queue("IT", null));
+        IntStream.range(0, 25).forEach(i -> desk.tickets.put("IT-" + i, ticket("IT-" + i, "IT")));
         desk.hits = new ArrayList<>(IntStream.range(0, 25).mapToObj(i -> summary("IT-" + i, "IT")).toList());
         desk.hits.add(0, summary("FIN-1", "FIN"));
 
-        var search = service.searchTickets("IT", "printer");
+        var search = service.searchTickets("IT", "printer", queue -> true);
 
         assertThat(search.tickets()).hasSize(20).allMatch(t -> t.queue().equals("IT"));
         assertThat(search.truncated()).isTrue();
@@ -108,9 +128,11 @@ class ServicedeskServiceTest {
     void searchDropsHitsOfAnotherAllowedQueueToo() {
         ServicedeskService twoQueues =
                 new ServicedeskService(desk, new QueueAccessPolicy(CredentialMode.SERVICE_ACCOUNT, Set.of("IT", "OPS")));
+        desk.queues.put("IT", new Queue("IT", null));
+        desk.tickets.put("IT-1", ticket("IT-1", "IT"));
         desk.hits = new ArrayList<>(List.of(summary("IT-1", "IT"), summary("OPS-5", "OPS")));
 
-        assertThat(twoQueues.searchTickets("IT", "printer").tickets()).extracting(TicketSummary::id)
+        assertThat(twoQueues.searchTickets("IT", "printer", queue -> true).tickets()).extracting(TicketSummary::id)
                 .as("the queue asked for is the boundary, not only the set the server may serve")
                 .containsExactly("IT-1");
     }
@@ -123,7 +145,7 @@ class ServicedeskServiceTest {
 
         assertThat(closed.findTickets(List.of("IT-1"))).isEmpty();
         assertThat(closed.findQueue("IT")).isEmpty();
-        assertThatThrownBy(() -> closed.searchTickets("IT", "x")).isInstanceOf(TicketNotFoundException.class);
+        assertThatThrownBy(() -> closed.searchTickets("IT", "x", queue -> true)).isInstanceOf(TicketNotFoundException.class);
         assertThat(desk.reads).isZero();
         assertThat(desk.queueReads).isZero();
         assertThat(desk.searches).isEmpty();

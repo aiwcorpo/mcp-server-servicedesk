@@ -104,7 +104,7 @@ chwili wywołania, nie na tym, co podał model:
 - `add_note`: ten sam resolver przed metodą, potem tylko zapis; przy odmowie nie ma żadnego zapisu;
 - `search_tickets`: kolejka z argumentu jest rozwiązywana (istnienie, klasyfikacja, lista serwera) zanim pójdzie
   zapytanie; dla konta serwisowego musi być też przyznana grupami wywołującego (`QueryScope.grantedIds()`, odpowiednik
-  `includeGrants`; brak przyznanych kolejek = pusty wynik bez zapytania do systemu), a link wirtualnego serwera zawęża ją dalej; z wyników zostają tylko
+  `includeGrants`; brak przyznanej kolejki = `not_found_or_denied` jak dla nieistniejącej, bez zapytania; trafienia sprawdzane po bieżącej kolejce zgłoszenia), a link wirtualnego serwera zawęża ją dalej; z wyników zostają tylko
   zgłoszenia, które system raportuje w tej kolejce (zgłoszenia przeniesione, a nadal w indeksie, i trafienia
   z innych kolejek odpadają).
 
@@ -286,7 +286,7 @@ hosta (`mcp-gateway/scripts/run-dev-host.sh`, JWKS na `localhost:18445`) skonfig
 
 ## Testy
 
-`./mvnw verify` (JDK 25, bez Dockera): 121 testów.
+`./mvnw verify` (JDK 25, bez Dockera): 122 testów.
 
 | Klasa | Co sprawdza |
 | --- | --- |

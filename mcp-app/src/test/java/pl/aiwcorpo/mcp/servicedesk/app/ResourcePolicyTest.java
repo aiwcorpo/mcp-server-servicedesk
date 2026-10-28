@@ -151,30 +151,41 @@ class ResourcePolicyTest extends ServerTestSupport {
     }
 
     @Test
-    void theServiceAccountSearchesOnlyQueuesTheGroupsOfTheCallerGrant() {
+    void aQueueTheCallerIsNotGrantedAnswersLikeAMissingQueueAndIsNotSearched() {
         try (McpSyncClient client = clientAs(
                 user -> user.groups(List.of("mcp-servicedesk-read", "mcp-servicedesk-queue-IT")), SERVICE_KEY,
                 BackendCredential.Type.SERVICE_ACCOUNT)) {
             McpSchema.CallToolResult granted = call(client, "search_tickets", Map.of("queue", "IT", "text", "printer"));
             BACKEND.reset();
             McpSchema.CallToolResult notGranted = call(client, "search_tickets", Map.of("queue", "OPS", "text", "printer"));
+            McpSchema.CallToolResult missing = call(client, "search_tickets", Map.of("queue", "NOPE", "text", "printer"));
 
             assertThat(text(granted)).contains("\"id\":\"IT-1\"");
-            assertThat(notGranted.isError()).isFalse();
-            assertThat(text(notGranted)).contains("\"tickets\":[]");
+            assertNotFoundOrDenied(notGranted);
+            assertThat(text(notGranted)).isEqualTo(text(missing));
         }
-        assertThat(BACKEND.requests()).as("the queue is looked up for the policy, then nothing is searched")
-                .containsExactly("GET /api/v1/queues/OPS");
+        assertThat(BACKEND.requests()).noneMatch(request -> request.contains("/tickets?"));
     }
 
     @Test
-    void aCallerGrantedNoQueueSearchesNothing() {
-        try (McpSyncClient client = clientAs(user -> user.groups(List.of("mcp-servicedesk-read")), SERVICE_KEY,
+    void aSearchHitWhoseCurrentQueueIsNotGrantedIsLeftOut() {
+        try (McpSyncClient client = clientAs(
+                user -> user.groups(List.of("mcp-servicedesk-read", "mcp-servicedesk-queue-IT")), SERVICE_KEY,
                 BackendCredential.Type.SERVICE_ACCOUNT)) {
             McpSchema.CallToolResult result = call(client, "search_tickets", Map.of("queue", "IT", "text", "printer"));
 
-            assertThat(result.isError()).isFalse();
-            assertThat(text(result)).contains("\"tickets\":[]");
+            assertThat(text(result)).contains("\"id\":\"IT-1\"", "\"id\":\"IT-2\"")
+                    .as("STALE-1 is in OPS now, which the caller is not granted, whatever the index says")
+                    .doesNotContain("STALE-1");
+            assertNotFoundOrDenied(call(client, "get_ticket", Map.of("ticketId", "STALE-1")));
+        }
+    }
+
+    @Test
+    void aCallerGrantedNoQueueIsRefusedTheSearchLikeAMissingQueue() {
+        try (McpSyncClient client = clientAs(user -> user.groups(List.of("mcp-servicedesk-read")), SERVICE_KEY,
+                BackendCredential.Type.SERVICE_ACCOUNT)) {
+            assertNotFoundOrDenied(call(client, "search_tickets", Map.of("queue", "IT", "text", "printer")));
         }
         assertThat(BACKEND.requests()).noneMatch(request -> request.contains("/tickets?"));
     }

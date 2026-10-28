@@ -8,6 +8,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Predicate;
 import org.junit.jupiter.api.Test;
 import pl.aiwcorpo.mcp.platform.error.InvalidToolArgumentException;
 import pl.aiwcorpo.mcp.platform.text.UntrustedText;
@@ -25,7 +26,7 @@ import pl.aiwcorpo.mcp.servicedesk.core.port.in.ServicedeskUseCase;
 class ServicedeskToolTest {
 
     private final List<String> calls = new ArrayList<>();
-    private final ServicedeskTool tool = new ServicedeskTool(new RecordingUseCase(), null);
+    private final ServicedeskTool tool = new ServicedeskTool(new RecordingUseCase(), null, null);
 
     @Test
     void textAndNoteLimits() {
@@ -52,7 +53,7 @@ class ServicedeskToolTest {
     private final class RecordingUseCase implements ServicedeskUseCase {
 
         @Override
-        public TicketSearch searchTickets(String queue, String text) {
+        public TicketSearch searchTickets(String queue, String text, Predicate<String> allowed) {
             calls.add("search " + queue);
             return new TicketSearch(queue, List.of(), false);
         }
@@ -73,7 +74,7 @@ class ServicedeskToolTest {
         }
 
         @Override
-        public NoteReceipt addNote(String ticketId, String body) {
+        public NoteReceipt addNote(String ticketId, String body, Predicate<String> allowed) {
             calls.add("note " + ticketId);
             return new NoteReceipt(ticketId, null);
         }

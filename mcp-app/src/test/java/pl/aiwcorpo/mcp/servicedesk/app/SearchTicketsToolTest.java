@@ -35,8 +35,10 @@ class SearchTicketsToolTest extends ServerTestSupport {
             assertThat(BACKEND.requests()).containsExactly("GET /api/v1/queues/IT",
                     "GET /api/v1/queues/IT/tickets?q=printer&limit=21",
                     "GET /api/v1/tickets/IT-1", "GET /api/v1/queues/IT", "GET /api/v1/tickets/IT-2",
+                    "GET /api/v1/tickets/MOVED-3", "GET /api/v1/tickets/STALE-1", "GET /api/v1/queues/OPS",
+                    "GET /api/v1/tickets/IT-1", "GET /api/v1/queues/IT", "GET /api/v1/tickets/IT-2",
                     "GET /api/v1/tickets/MOVED-3", "GET /api/v1/tickets/STALE-1", "GET /api/v1/queues/OPS");
-            assertThat(BACKEND.authorizations()).hasSize(8).containsOnly(SERVICE_KEY);
+            assertThat(BACKEND.authorizations()).hasSize(14).containsOnly(SERVICE_KEY);
         }
     }
 

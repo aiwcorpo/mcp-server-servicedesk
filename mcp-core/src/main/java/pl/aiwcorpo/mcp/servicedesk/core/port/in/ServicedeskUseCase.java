@@ -3,6 +3,7 @@ package pl.aiwcorpo.mcp.servicedesk.core.port.in;
 import java.util.Collection;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Predicate;
 import pl.aiwcorpo.mcp.servicedesk.core.domain.ClassifiedTicket;
 import pl.aiwcorpo.mcp.servicedesk.core.domain.NoteReceipt;
 import pl.aiwcorpo.mcp.servicedesk.core.domain.Queue;
@@ -30,7 +31,15 @@ public interface ServicedeskUseCase {
     /** Whether this call runs on the platform's service account, for which the grants of the caller bound the search. */
     boolean serviceAccountCall();
 
-    TicketSearch searchTickets(String queue, String text);
+    /**
+     * @param currentQueueAllowed judges the queue the service desk reports for a hit now; for a service account call
+     *                            a hit it refuses is left out (the caller's grants, which the index may lag behind)
+     */
+    TicketSearch searchTickets(String queue, String text, Predicate<String> currentQueueAllowed);
 
-    NoteReceipt addNote(String ticketId, String body);
+    /**
+     * Reads the ticket again just before writing and refuses when its queue is no longer one {@code currentQueueAllowed}
+     * accepts; a move between that read and the write stays possible (no conditional write in generic REST).
+     */
+    NoteReceipt addNote(String ticketId, String body, Predicate<String> currentQueueAllowed);
 }

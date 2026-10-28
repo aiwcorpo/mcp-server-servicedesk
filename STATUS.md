@@ -2,7 +2,7 @@
 
 M1: osiągnięty (2026-10-27, runda 2; 2026-10-28 przeniesiony na starter 3.0.0-alpha-10) - `search_tickets`, `get_ticket`, `add_note` na generycznym adapterze REST (D10); konto serwisowe fail-closed (tylko kolejki z konfiguracji, pusta lista = odmowa), notatki z autorem zlecenia, walidacja argumentów w starterze (C10 + C8), zmiany template'u od 7f65f8f przeniesione, 84 testy na stubie.
 
-M3: osiągnięty (2026-10-28) - starter 3.0.0-beta-3 (kontrakty 3.1.0): `@ToolTitle`, `@ResourceRef` + `ResourceResolver` dla `ServiceDesk::Queue` i `ServiceDesk::Ticket` (klasyfikacja kolejki z systemu, brak klasyfikacji = nie tajne), wyszukiwanie ograniczone linkiem i grantami konta serwisowego (`QueryScope`), `ResultFilter` po `@ResourceRef` w trafieniu, paczka polityk i manifest (`GET /mcp-manifest` przechodzi reguły), atrybucja notatki z escapowaniem HTML/Markdown i trzema formami frazy bez zmian, 121 testów.
+M3: osiągnięty (2026-10-28) - starter 3.0.0-beta-3 (kontrakty 3.1.0): `@ToolTitle`, `@ResourceRef` + `ResourceResolver` dla `ServiceDesk::Queue` i `ServiceDesk::Ticket` (klasyfikacja kolejki z systemu, brak klasyfikacji = nie tajne), wyszukiwanie ograniczone linkiem i grantami konta serwisowego (`QueryScope`), `ResultFilter` po `@ResourceRef` w trafieniu, paczka polityk i manifest (`GET /mcp-manifest` przechodzi reguły), atrybucja notatki z escapowaniem HTML/Markdown i trzema formami frazy bez zmian, 122 testów.
 
 Start: wygenerowany z `mcp-server-template` 7f65f8f (`./new-server.sh servicedesk`), pierwszy commit to stan
 bez zmian. Starter: BOM `pl.aiwcorpo.mcp:mcp-platform-bom:3.0.0-alpha-11` (kontrakty 2.1.1). M2 nie jest
@@ -172,8 +172,8 @@ bez tytułów i paczki, więc listy "Z alpha-14 na beta-1" i "Z beta-1 na beta-2
 | Obraz bez Alpine | Dockerfile na `eclipse-temurin:25-jre` (cedar-java, glibc) |
 | Higiena tekstu, `mentionFiltered` | `add_note.body` nie jest filtrowane wzmianek (service desk nie zamienia `@nazwa` w powiadomienie wg dostępnej wiedzy; do potwierdzenia przy D10) |
 
-Weryfikacja: `./mvnw -B clean verify` (JDK 25) -> 121 testów, 0 błędów (core 6, application 10, integration 29,
-tools 2, app 74). Start profilu `dev` na 18790 z prawdziwą paczką ws-09 (`:18747`): `policy_bundle_loaded`,
+Weryfikacja: `./mvnw -B clean verify` (JDK 25) -> 122 testów, 0 błędów (core 6, application 11, integration 29,
+tools 2, app 75). Start profilu `dev` na 18790 z prawdziwą paczką ws-09 (`:18747`): `policy_bundle_loaded`,
 `manifest_ready tools=3`, health 200, `POST /mcp` bez JWT 401; proces zatrzymany.
 
 ## Odstępstwa M3
@@ -214,3 +214,14 @@ tools 2, app 74). Start profilu `dev` na 18790 z prawdziwą paczką ws-09 (`:187
   czy lista), bo dziś "kategoria kolejki w adapterze service desku" nie wskazuje, skąd ją brać.
 - `CC-???` (C9): `access_denied` zamiast `not_found_or_denied` dla kolejki z argumentu poza linkiem (reguła wywołania)
   ujawnia, że kolejka istnieje poza linkiem; rozważyć ujednolicenie.
+
+## Poprawki po przeglądzie M3 (2026-10-28)
+
+| Znalezisko | Status |
+| --- | --- |
+| S-M1 wyszukiwanie w kolejce bez grantu | `search_tickets` kontem serwisowym w kolejce bez grantu (lub poza linkiem) rzuca ten sam `not_found_or_denied` co dla nieistniejącej, system nie jest pytany o zgłoszenia (`aQueueTheCallerIsNotGrantedAnswersLikeAMissingQueueAndIsNotSearched`, `aCallerGrantedNoQueueIsRefusedTheSearchLikeAMissingQueue`) |
+| S-M2 trafienia a granty | dla wywołania kontem serwisowym `ServicedeskService.searchTickets` pobiera bieżące zgłoszenia trafień i zostawia te, których bieżąca kolejka przechodzi `ServicedeskSearchScope` (granty + link); `aSearchHitWhoseCurrentQueueIsNotGrantedIsLeftOut` (klient z grantem tylko IT, `STALE-1` w OPS). Koszt: dodatkowy komplet `GET` zgłoszeń przed `ResultFilter` |
+| S-L2 definicja konta serwisowego | jedna: `QueueAccessPolicy.serviceAccountCall` (tryb serwera LUB etykieta poświadczenia), używana przez narzędzia i serwis. Atrybucja notatki zostaje na etykiecie poświadczenia (opisuje poświadczenie, nie politykę) |
+| S-L3 odstępstwa od wektorów CC-076 | `granted-in-server-config`: granty z paczki i lista serwera obowiązują naraz, więc kolejka tylko z listy serwera jest odmawiana (ostrzej niż wektor). `no-queue-grant`: `get_ticket` bez grantów czyta zgłoszenie i kolejkę z systemu, zanim odmówi w metodzie (odpowiedź bez wycieku, ale system jest pytany) |
+| S-L4 audyt | odmowa grantu pisze `policy_decision` (`decision: deny`, `reason: not_granted`, typ i id zasobu, `policyRevision` z tokenu) przez `AuditLogger` startera |
+| S-L5 TOCTOU `add_note` | `addNote` czyta zgłoszenie jeszcze raz tuż przed zapisem i odmawia, gdy jego kolejka nie przechodzi zakresu; okno między tym odczytem a `POST` zostaje (brak zapisu warunkowego w generycznym REST) |

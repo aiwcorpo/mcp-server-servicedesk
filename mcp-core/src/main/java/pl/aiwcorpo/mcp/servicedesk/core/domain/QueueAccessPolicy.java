@@ -36,6 +36,14 @@ public record QueueAccessPolicy(CredentialMode mode, Set<String> allowedQueues) 
         return mode == CredentialMode.SERVICE_ACCOUNT || serviceAccountCredential || !allowedQueues.isEmpty();
     }
 
+    /**
+     * The one definition of "a service account call": the server is configured for the service account, or the gateway
+     * labelled this call's credential so. Grants of the caller's groups and the attribution of notes follow it.
+     */
+    public boolean serviceAccountCall(boolean serviceAccountCredential) {
+        return mode == CredentialMode.SERVICE_ACCOUNT || serviceAccountCredential;
+    }
+
     /** Whether the server may serve anything at all for such a call; false skips the backend entirely. */
     public boolean servesAnyQueue(boolean serviceAccountCredential) {
         return !restricted(serviceAccountCredential) || !allowedQueues.isEmpty();

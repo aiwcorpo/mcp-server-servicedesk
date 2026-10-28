@@ -6,6 +6,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Predicate;
 import pl.aiwcorpo.mcp.servicedesk.core.domain.ClassifiedTicket;
 import pl.aiwcorpo.mcp.servicedesk.core.domain.NoteReceipt;
 import pl.aiwcorpo.mcp.servicedesk.core.domain.Queue;
@@ -38,7 +39,7 @@ public class ServicedeskService implements ServicedeskUseCase {
 
     @Override
     public boolean serviceAccountCall() {
-        return resource.callerIsServiceAccount();
+        return policy.serviceAccountCall(resource.callerIsServiceAccount());
     }
 
     @Override
@@ -73,7 +74,7 @@ public class ServicedeskService implements ServicedeskUseCase {
     }
 
     @Override
-    public TicketSearch searchTickets(String queue, String text) {
+    public TicketSearch searchTickets(String queue, String text, Predicate<String> currentQueueAllowed) {
         boolean serviceAccount = resource.callerIsServiceAccount();
         if (!policy.permits(queue, serviceAccount)) {
             throw new TicketNotFoundException();
@@ -85,16 +86,27 @@ public class ServicedeskService implements ServicedeskUseCase {
         List<TicketSummary> inQueue = hits.stream()
                 .filter(hit -> hit.queue().equals(queue) && policy.permits(hit.queue(), serviceAccount))
                 .toList();
+        if (policy.serviceAccountCall(serviceAccount)) {
+            Map<String, ClassifiedTicket> current = findTickets(inQueue.stream().map(TicketSummary::id).toList());
+            inQueue = inQueue.stream().filter(hit -> {
+                ClassifiedTicket ticket = current.get(hit.id());
+                return ticket != null && currentQueueAllowed.test(ticket.ticket().queue());
+            }).toList();
+        }
         boolean truncated = hits.size() > SEARCH_LIMIT || inQueue.size() > SEARCH_LIMIT;
         return new TicketSearch(queue, inQueue.stream().limit(SEARCH_LIMIT).toList(), truncated);
     }
 
     /**
-     * The ticket was resolved and judged before this runs (the id is a {@code @ResourceRef}), so the note is written
-     * without reading the ticket again.
+     * The ticket was resolved and judged before this runs (the id is a {@code @ResourceRef}); it is read once more
+     * right before the write, because a ticket moved in between would otherwise get the note.
      */
     @Override
-    public NoteReceipt addNote(String ticketId, String body) {
+    public NoteReceipt addNote(String ticketId, String body, Predicate<String> currentQueueAllowed) {
+        ClassifiedTicket ticket = findTickets(List.of(ticketId)).get(ticketId);
+        if (ticket == null || !currentQueueAllowed.test(ticket.ticket().queue())) {
+            throw new TicketNotFoundException();
+        }
         String noteId = resource.addNote(ticketId, body).orElseThrow(TicketNotFoundException::new);
         return new NoteReceipt(ticketId, noteId.isEmpty() ? null : noteId);
     }

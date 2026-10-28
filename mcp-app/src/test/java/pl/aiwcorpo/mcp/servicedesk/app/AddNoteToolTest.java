@@ -26,8 +26,9 @@ class AddNoteToolTest extends ServerTestSupport {
             assertThat(result.isError()).isFalse();
             assertThat(text(result)).contains("\"ticketId\":\"IT-1\"", "\"noteId\":\"N-1\"");
             assertThat(BACKEND.requests()).containsExactly("GET /api/v1/tickets/IT-1", "GET /api/v1/queues/IT",
-                    "POST /api/v1/tickets/IT-1/notes");
-            assertThat(BACKEND.authorizations()).containsExactly(SERVICE_KEY, SERVICE_KEY, SERVICE_KEY);
+                    "GET /api/v1/tickets/IT-1", "GET /api/v1/queues/IT", "POST /api/v1/tickets/IT-1/notes");
+            assertThat(BACKEND.authorizations()).as("the ticket is read again right before the write")
+                    .hasSize(5).containsOnly(SERVICE_KEY);
             assertThat(BACKEND.noteBodies()).containsExactly(
                     "IT-1 {\"visibility\":\"internal\",\"body\":\"[Added through the MCP platform on behalf of jkowalski]"
                             + "\\nReplaced the toner.\\n\\\"Done\\\" &amp; closed, a &lt; b &gt; c\"}");

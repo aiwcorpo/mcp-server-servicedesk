@@ -5,11 +5,13 @@ import org.jspecify.annotations.Nullable;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.stereotype.Service;
+import pl.aiwcorpo.mcp.platform.auth.CallerContext;
 import pl.aiwcorpo.mcp.platform.error.InvalidToolArgumentException;
 import pl.aiwcorpo.mcp.platform.guard.RiskLevel;
 import pl.aiwcorpo.mcp.platform.guard.ToolRisk;
 import pl.aiwcorpo.mcp.platform.guard.ToolTitle;
 import pl.aiwcorpo.mcp.platform.input.ArgumentLimits;
+import pl.aiwcorpo.mcp.platform.observability.AuditLogger;
 import pl.aiwcorpo.mcp.platform.resource.QueryScope;
 import pl.aiwcorpo.mcp.platform.resource.ResourceContext;
 import pl.aiwcorpo.mcp.platform.resource.ResourcePolicy;
@@ -44,10 +46,12 @@ public class ServicedeskTool {
 
     private final ServicedeskUseCase useCase;
     private final ResourcePolicy policy;
+    private final AuditLogger audit;
 
-    public ServicedeskTool(ServicedeskUseCase useCase, ResourcePolicy policy) {
+    public ServicedeskTool(ServicedeskUseCase useCase, ResourcePolicy policy, AuditLogger audit) {
         this.useCase = useCase;
         this.policy = policy;
+        this.audit = audit;
     }
 
     /**
@@ -68,10 +72,12 @@ public class ServicedeskTool {
             @ArgumentLimits(minLength = 1, maxLength = TEXT_MAX) String text) {
         String searched = validText("text", text, TEXT_MAX);
         QueryScope scope = policy.queryScope(ServicedeskResourceModel.QUEUE_TYPE);
-        if (!ServicedeskSearchScope.permits(scope, queue, useCase.serviceAccountCall())) {
-            return new TicketSearchView(queue, List.of(), false);
+        boolean serviceAccount = useCase.serviceAccountCall();
+        if (!ServicedeskSearchScope.permits(scope, queue, serviceAccount)) {
+            throw denied(ServicedeskResourceModel.QUEUE_TYPE, queue);
         }
-        return TicketSearchView.of(useCase.searchTickets(queue, searched));
+        return TicketSearchView.of(useCase.searchTickets(queue, searched,
+                current -> ServicedeskSearchScope.permits(scope, current, serviceAccount)));
     }
 
     @Tool(name = "get_ticket", description = "Returns one service desk ticket: id, queue, status, priority, "
@@ -104,7 +110,10 @@ public class ServicedeskTool {
         ClassifiedTicket fetched = ResourceContext.current().orElseThrow()
                 .fetched(ServicedeskResourceModel.TICKET_TYPE, ticketId, ClassifiedTicket.class).orElseThrow();
         requireInScope(fetched.ticket());
-        NoteReceipt receipt = useCase.addNote(ticketId, note);
+        QueryScope scope = policy.queryScope(ServicedeskResourceModel.QUEUE_TYPE);
+        boolean serviceAccount = useCase.serviceAccountCall();
+        NoteReceipt receipt = useCase.addNote(ticketId, note,
+                current -> ServicedeskSearchScope.permits(scope, current, serviceAccount));
         return new NoteView(receipt.ticketId(), receipt.noteId());
     }
 
@@ -116,8 +125,19 @@ public class ServicedeskTool {
     private void requireInScope(Ticket ticket) {
         QueryScope scope = policy.queryScope(ServicedeskResourceModel.QUEUE_TYPE);
         if (!ServicedeskSearchScope.permits(scope, ticket.queue(), useCase.serviceAccountCall())) {
-            throw new TicketNotFoundException();
+            throw denied(ServicedeskResourceModel.TICKET_TYPE, ticket.id());
         }
+    }
+
+    /**
+     * The refusal of the caller's grants, which Cedar does not express for the service account: the answer is the one of
+     * a missing object, and the audit gets the same {@code policy_decision} the starter writes for its own denials.
+     */
+    private TicketNotFoundException denied(String type, String id) {
+        CallerContext.current().ifPresent(caller -> audit.policyDenied(caller,
+                ResourceContext.current().map(ResourceContext::tool).orElse(null), null, type, id, null, "not_granted",
+                caller.policyRevision(), "not_found_or_denied"));
+        return new TicketNotFoundException();
     }
 
     private static String validText(String name, String value, int max) {
