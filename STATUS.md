@@ -42,12 +42,12 @@ BOM alpha-6 -> alpha-10 (kontrakty 2.1.1). Źródło: `MIGRATION-3.0.md`, alpha-
 | `dev` i obejścia w `application-dev.yml` | usunięte `replay-store: memory` i `mtls.required: false`; `SPRING_PROFILES_ACTIVE=dev` zostaje tylko w poleceniu README |
 | Własne beany polityki i audytu | brak |
 | Klient HTTP odrzuca query i fragment w adresie | `ServicedeskApi.requireBaseUrl` już to robiło (rzut przy starcie adaptera); dopisane testy dla `?`, `#frag`, `?x=1#frag` |
-| S2-L2 test filtra nazwy autora notatki | `anAuthorNameOutsideTheSafeAlphabetIsNeverWrittenIntoTheNote` (nazwa z `]` i znacznikiem trafia do `sub`, nie do notatki). Druga linia ze znacznikiem w treści od modelu nadal możliwa (nie robione, zmiana zachowania) |
+| S2-L2 test filtra nazwy autora notatki | `anAuthorNameOutsideTheSafeAlphabetIsNeverWrittenIntoTheNote` (nazwa z `]` i znacznikiem trafia do `sub`, nie do notatki). Druga linia ze znacznikiem: zamknięte w rundzie 4 (S3-L1) |
 | Claimy `vs` i `vsc:{}` | `GatewayLinkClaimsTest`: wywołanie `get_ticket` z `virtualServer("it-helpdesk", Map.of())` przechodzi |
 | Zgodność z mockiem ws-01 | nie sprawdzano (STATUS ws-01 nie obiecuje mocka z kształtem pól tego generycznego adaptera) |
 
-Weryfikacja: `./mvnw -B clean verify` (JDK 25) -> 84 testy, 0 błędów (mcp-app 49, mcp-integration 18, mcp-application 8,
-mcp-core 6, mcp-tools 3). Uruchomienie wg README: `dev` na 18530, health 200, `POST /mcp` bez JWT 401; proces zatrzymany.
+Weryfikacja: `./mvnw -B clean verify` (JDK 25) -> 86 testów, 0 błędów (mcp-app 50, mcp-integration 18, mcp-application 8,
+mcp-core 6, mcp-tools 4). Uruchomienie wg README: `dev` na 18530, health 200, `POST /mcp` bez JWT 401; proces zatrzymany.
 
 ## Co działa
 
@@ -150,3 +150,10 @@ Dopisane na końcu `mcp-contracts/CONTRACT_CHANGES.md` (status open, bez commitu
   `/mcp/servicedesk`, niezgodnie z `ServiceDeskTicketId` i endpointem `/mcp`.
 - `CC-??? | C7`: konto serwisowe service desku: brak grantu kolejki = odmowa, ocena na kolejce zwróconej przez
   system.
+
+## Runda 4: poprawki przeglądu alpha-10 (2026-10-28)
+
+| Znalezisko | Status | Dowód |
+| --- | --- | --- |
+| S3-L1 podrobiona druga linia atrybucji w notatce | poprawione odrzuceniem: `add_note` zwraca `invalid_argument`, gdy treść zawiera `[Added through the MCP platform` (wielkość liter i białe znaki, także twarda spacja, pomijane; w każdym miejscu treści, nie tylko na początku linii), przy obu rodzajach poświadczenia. Wybrane zamiast pola autora w API, bo adapter jest generyczny i nie zna wskaźnika autora. Poza zakresem: wizualne sobowtóry znaków (np. cyfra 1 zamiast `l`), których agent musiałby nie zauważyć, a to nie jest ta sama linia | `ServicedeskToolTest.aNoteCannotCarryTheAttributionLineOfThePlatform`, `AddNoteToolTest.aForgedSecondAttributionLineNeverReachesTheServiceDesk` (brak POST do systemu) |
+| A10-M1 `DevProfileLoopbackTest` | bez zmian, rozwiąże starter alpha-11 | |

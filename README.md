@@ -75,7 +75,9 @@ service desku widział, kto ją zlecił, serwer dokleja na początku treści sta
 `[Added through the MCP platform on behalf of <użytkownik>]`. Nazwa pochodzi z zaufanego tokenu gateway'a
 (`CallerContext`: `usr`, a gdy go brak `sub`), nie z argumentów narzędzia, i jest ograniczona do znaków
 `A-Za-z0-9._@-` (inaczej `unknown`). Przy `user-secret` autorem jest sam użytkownik i prefiksu nie ma. Limit
-10000 znaków dotyczy tekstu od modelu, prefiks dochodzi do niego.
+10000 znaków dotyczy tekstu od modelu, prefiks dochodzi do niego. Treść od modelu, która sama zawiera
+`[Added through the MCP platform` (bez względu na wielkość liter i odstępy), jest odrzucana jako `invalid_argument`,
+żeby agent service desku nie widział drugiej, podrobionej atrybucji.
 
 ## Granica kolejek
 

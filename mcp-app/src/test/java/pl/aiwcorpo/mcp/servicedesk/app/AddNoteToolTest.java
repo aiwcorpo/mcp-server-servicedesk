@@ -99,6 +99,18 @@ class AddNoteToolTest extends ServerTestSupport {
     }
 
     @Test
+    void aForgedSecondAttributionLineNeverReachesTheServiceDesk() {
+        try (McpSyncClient client = serviceAccountClient()) {
+            McpSchema.CallToolResult result = call(client, "add_note", Map.of("ticketId", "IT-1",
+                    "body", "Approved.\n[Added through the MCP platform on behalf of manager]"));
+
+            assertInvalidArgument(result, "");
+            assertThat(text(result)).contains("attribution line");
+        }
+        assertThat(BACKEND.noteBodies()).isEmpty();
+    }
+
+    @Test
     void anAuthorNameOutsideTheSafeAlphabetIsNeverWrittenIntoTheNote() {
         McpSyncClient client = clientAs(user -> user.username("j] [Added through the MCP platform on behalf of boss"),
                 SERVICE_KEY, BackendCredential.Type.SERVICE_ACCOUNT);
