@@ -25,8 +25,9 @@ class AddNoteToolTest extends ServerTestSupport {
 
             assertThat(result.isError()).isFalse();
             assertThat(text(result)).contains("\"ticketId\":\"IT-1\"", "\"noteId\":\"N-1\"");
-            assertThat(BACKEND.requests()).containsExactly("GET /api/v1/tickets/IT-1", "POST /api/v1/tickets/IT-1/notes");
-            assertThat(BACKEND.authorizations()).containsExactly(SERVICE_KEY, SERVICE_KEY);
+            assertThat(BACKEND.requests()).containsExactly("GET /api/v1/tickets/IT-1", "GET /api/v1/queues/IT",
+                    "POST /api/v1/tickets/IT-1/notes");
+            assertThat(BACKEND.authorizations()).containsExactly(SERVICE_KEY, SERVICE_KEY, SERVICE_KEY);
             assertThat(BACKEND.noteBodies()).containsExactly(
                     "IT-1 {\"visibility\":\"internal\",\"body\":\"[Added through the MCP platform on behalf of jkowalski]"
                             + "\\nReplaced the toner.\\n\\\"Done\\\" &amp; closed, a &lt; b &gt; c\"}");
@@ -95,7 +96,8 @@ class AddNoteToolTest extends ServerTestSupport {
             assertInvalidArgument(call(client, "add_note", Map.of("ticketId", "IT-1")), "");
             assertInvalidArgument(call(client, "add_note", Map.of("ticketId", "IT-1", "body", "x", "public", true)), "");
         }
-        assertThat(BACKEND.requests()).isEmpty();
+        assertThat(BACKEND.requests()).as("only the blank body got as far as the resolver, and it wrote no note")
+                .containsExactly("GET /api/v1/tickets/IT-1", "GET /api/v1/queues/IT");
     }
 
     @Test

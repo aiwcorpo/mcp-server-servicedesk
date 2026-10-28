@@ -28,6 +28,7 @@ import pl.aiwcorpo.mcp.platform.error.InvalidToolArgumentException;
 import pl.aiwcorpo.mcp.platform.security.BackendCredential;
 import pl.aiwcorpo.mcp.platform.security.CredentialContext;
 import pl.aiwcorpo.mcp.platform.security.CredentialRequiredException;
+import pl.aiwcorpo.mcp.servicedesk.core.domain.Queue;
 import pl.aiwcorpo.mcp.servicedesk.core.domain.Ticket;
 import pl.aiwcorpo.mcp.servicedesk.core.domain.TicketSummary;
 import pl.aiwcorpo.mcp.servicedesk.core.port.out.ServicedeskResourcePort;
@@ -94,6 +95,12 @@ public class ServicedeskResourceAdapter implements ServicedeskResourcePort {
     public Optional<Ticket> findTicket(String ticketId) {
         BackendCredential credential = CredentialContext.require(SYSTEM);
         return get(api.ticketUri(ticketId), credential).flatMap(api.ticketJson()::ticket);
+    }
+
+    @Override
+    public Optional<Queue> findQueue(String queueId) {
+        BackendCredential credential = CredentialContext.require(SYSTEM);
+        return get(api.queueUri(queueId), credential).flatMap(api::queue);
     }
 
     @Override

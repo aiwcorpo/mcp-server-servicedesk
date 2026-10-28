@@ -45,8 +45,9 @@ class GetTicketToolTest extends ServerTestSupport {
                     .as("fields outside the mapping stay in the adapter")
                     .doesNotContain("jkowalski@corp.internal", "internalCost", "+48")
                     .as("no markup reaches the model").doesNotContain("<p>", "<script", "steal()");
-            assertThat(BACKEND.authorizations()).containsExactly(SERVICE_KEY);
-            assertThat(BACKEND.requests()).containsExactly("GET /api/v1/tickets/IT-1");
+            assertThat(BACKEND.authorizations()).containsExactly(SERVICE_KEY, SERVICE_KEY);
+            assertThat(BACKEND.requests()).as("the ticket and its queue, once: the tool reuses what the resolver fetched")
+                    .containsExactly("GET /api/v1/tickets/IT-1", "GET /api/v1/queues/IT");
         }
     }
 

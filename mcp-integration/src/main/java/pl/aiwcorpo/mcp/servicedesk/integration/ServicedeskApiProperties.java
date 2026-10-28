@@ -10,13 +10,23 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @param credentialHeader header that carries the credential: {@code Authorization} gets {@code <scheme> <value>}
  *                         as the gateway sent it (C3), any other header gets the bare value (API key headers)
  * @param ticketPath       path of one ticket, with the {@code {ticketId}} placeholder
+ * @param queue            one queue: its existence and classification
  * @param search           text search in one queue
  * @param note             adding a note to a ticket
  * @param fields           JSON pointers of the ticket fields, relative to a ticket object
  */
 @ConfigurationProperties("servicedesk.api")
-public record ServicedeskApiProperties(String credentialHeader, String ticketPath, Search search, Note note,
-        Fields fields) {
+public record ServicedeskApiProperties(String credentialHeader, String ticketPath, Queue queue, Search search,
+        Note note, Fields fields) {
+
+    /**
+     * @param path                  path of one queue, with the {@code {queue}} placeholder
+     * @param idPointer             JSON pointer of the queue id in the response
+     * @param classificationPointer JSON pointer of the queue classification (a string or an array of strings); empty
+     *                              when the product has none. A queue that reports none is not classified.
+     */
+    public record Queue(String path, String idPointer, String classificationPointer) {
+    }
 
     /**
      * @param path           search path; may contain {@code {queue}}, otherwise {@code queueParam} is required

@@ -15,7 +15,7 @@ public class ServicedeskToolErrors implements ToolErrorMapping {
     public Optional<SafeError> map(Throwable ex) {
         if (ex instanceof TicketNotFoundException) {
             return Optional.of(new SafeError(ToolErrorCode.NOT_FOUND_OR_DENIED.code(),
-                    "The ticket or queue does not exist or you have no access to it."));
+                    "The resource does not exist or you do not have access to it."));
         }
         return Optional.empty();
     }

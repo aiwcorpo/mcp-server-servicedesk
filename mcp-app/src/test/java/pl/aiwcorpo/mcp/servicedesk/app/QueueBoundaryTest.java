@@ -75,7 +75,7 @@ class QueueBoundaryTest extends ServerTestSupport {
             assertNotFoundOrDenied(caseVariant);
             assertThat(text(otherQueue)).isEqualTo(text(missingQueue));
         }
-        assertThat(BACKEND.requests()).containsExactly("GET /api/v1/queues/GONE/tickets?q=x&limit=21");
+        assertThat(BACKEND.requests()).containsExactly("GET /api/v1/queues/GONE");
     }
 
     @Test

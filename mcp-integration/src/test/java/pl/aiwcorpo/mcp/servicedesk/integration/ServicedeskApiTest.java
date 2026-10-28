@@ -20,8 +20,11 @@ class ServicedeskApiTest {
     private static final ServicedeskApiProperties.Fields FIELDS = new ServicedeskApiProperties.Fields(
             "/id", "/queue", "/subject", "/status", "", "", "/updatedAt", "/description");
 
+    private static final ServicedeskApiProperties.Queue QUEUE =
+            new ServicedeskApiProperties.Queue("/api/v1/queues/{queue}", "/id", "/classification");
+
     static ServicedeskApiProperties reference() {
-        return new ServicedeskApiProperties("Authorization", "/api/v1/tickets/{ticketId}",
+        return new ServicedeskApiProperties("Authorization", "/api/v1/tickets/{ticketId}", QUEUE,
                 new ServicedeskApiProperties.Search("/api/v1/queues/{queue}/tickets", null, "q", "limit", "/items"),
                 new ServicedeskApiProperties.Note("/api/v1/tickets/{ticketId}/notes", "POST", "/body",
                         List.of(new ServicedeskApiProperties.StaticField("/visibility", "\"internal\"")), "/id"),
@@ -45,7 +48,7 @@ class ServicedeskApiTest {
 
     @Test
     void queueCanGoAsAParameterWhenThePathHasNoPlaceholder() {
-        ServicedeskApiProperties properties = new ServicedeskApiProperties(null, "/rest/ticket/{ticketId}",
+        ServicedeskApiProperties properties = new ServicedeskApiProperties(null, "/rest/ticket/{ticketId}", QUEUE,
                 new ServicedeskApiProperties.Search("/rest/search", "queue", "text", "", ""),
                 new ServicedeskApiProperties.Note("/rest/ticket/{ticketId}", "PATCH", "/work_notes", null, ""),
                 FIELDS);
@@ -62,7 +65,7 @@ class ServicedeskApiTest {
 
     @Test
     void noteBodyCarriesTheTextAsAJsonValueAndTheStaticFields() {
-        ServicedeskApiProperties nested = new ServicedeskApiProperties(null, "/t/{ticketId}",
+        ServicedeskApiProperties nested = new ServicedeskApiProperties(null, "/t/{ticketId}", QUEUE,
                 new ServicedeskApiProperties.Search("/q/{queue}", null, "q", null, null),
                 new ServicedeskApiProperties.Note("/t/{ticketId}/comments", null, "/ticket/comment/body",
                         List.of(new ServicedeskApiProperties.StaticField("/ticket/comment/public", "false")), "/a/id"),
@@ -87,7 +90,7 @@ class ServicedeskApiTest {
                     note.bodyPointer(), List.of(new ServicedeskApiProperties.StaticField("/visibility", "\"internal\""),
                             new ServicedeskApiProperties.StaticField(pointer, "true")), note.idPointer());
             assertThatThrownBy(() -> new ServicedeskApi("https://sd.internal", new ServicedeskApiProperties(
-                    props.credentialHeader(), props.ticketPath(), props.search(), overlapping, props.fields()), MAPPER))
+                    props.credentialHeader(), props.ticketPath(), props.queue(), props.search(), overlapping, props.fields()), MAPPER))
                     .isInstanceOf(IllegalStateException.class).hasMessageContaining("note.static-fields");
         }
     }
@@ -102,7 +105,7 @@ class ServicedeskApiTest {
 
         ServicedeskApiProperties props = reference();
         ServicedeskApi apiKeyHeader = new ServicedeskApi("http://sd.internal", new ServicedeskApiProperties(
-                "X-API-Key", props.ticketPath(), props.search(), props.note(), props.fields()), MAPPER);
+                "X-API-Key", props.ticketPath(), props.queue(), props.search(), props.note(), props.fields()), MAPPER);
         HttpHeaders custom = new HttpHeaders();
         apiKeyHeader.applyCredential(key, custom);
         assertThat(custom.getFirst("X-API-Key")).isEqualTo("k-123");
@@ -123,29 +126,71 @@ class ServicedeskApiTest {
         assertInvalid("http://sd.internal?", ok, "base-url");
         assertInvalid("https://sd.internal/api#frag", ok, "base-url");
         assertInvalid("https://sd.internal/api?x=1#frag", ok, "base-url");
-        assertInvalid("http://sd.internal", new ServicedeskApiProperties(null, ok.ticketPath(),
+        assertInvalid("http://sd.internal", new ServicedeskApiProperties(null, ok.ticketPath(), QUEUE,
                 new ServicedeskApiProperties.Search("/search", "", "q", null, null), ok.note(), ok.fields()),
                 "queue-param");
-        assertInvalid("http://sd.internal", new ServicedeskApiProperties(null, ok.ticketPath(), ok.search(),
+        assertInvalid("http://sd.internal", new ServicedeskApiProperties(null, ok.ticketPath(), QUEUE, ok.search(),
                 new ServicedeskApiProperties.Note("/n/{ticketId}", "DELETE", "/body", null, null), ok.fields()),
                 "method");
-        assertInvalid("http://sd.internal", new ServicedeskApiProperties(null, ok.ticketPath(), ok.search(),
+        assertInvalid("http://sd.internal", new ServicedeskApiProperties(null, ok.ticketPath(), QUEUE, ok.search(),
                 new ServicedeskApiProperties.Note("/n/{ticketId}", "POST", "/body",
                         List.of(new ServicedeskApiProperties.StaticField("/x", "not json")), null), ok.fields()),
                 "static-fields");
-        assertInvalid("http://sd.internal", new ServicedeskApiProperties(null, ok.ticketPath(), ok.search(),
+        assertInvalid("http://sd.internal", new ServicedeskApiProperties(null, ok.ticketPath(), QUEUE, ok.search(),
                 new ServicedeskApiProperties.Note("/n/{ticketId}", "POST", "/body",
                         List.of(new ServicedeskApiProperties.StaticField("/body", "1")), null), ok.fields()),
                 "static-fields");
-        assertInvalid("http://sd.internal", new ServicedeskApiProperties(null, ok.ticketPath(), ok.search(),
+        assertInvalid("http://sd.internal", new ServicedeskApiProperties(null, ok.ticketPath(), QUEUE, ok.search(),
                 ok.note(), new ServicedeskApiProperties.Fields("/id", "", null, null, null, null, null, null)),
                 "fields.queue");
-        assertInvalid("http://sd.internal", new ServicedeskApiProperties("Bad Header", ok.ticketPath(),
+        assertInvalid("http://sd.internal", new ServicedeskApiProperties("Bad Header", ok.ticketPath(), QUEUE,
                 ok.search(), ok.note(), ok.fields()), "credential-header");
     }
 
+    @Test
+    void aQueueReportsItsClassificationAsAStringOrAnArrayOrNone() {
+        assertThat(api.queueUri("IT").getRawPath()).isEqualTo("/base/api/v1/queues/IT");
+        assertThat(api.queue(MAPPER.readTree("{\"id\":\"IT\"}")).orElseThrow().classification())
+                .as("a queue that reports none is not classified").isNull();
+        assertThat(api.queue(MAPPER.readTree("{\"id\":\"IT\",\"classification\":null}")).orElseThrow().classification())
+                .isNull();
+        assertThat(api.queue(MAPPER.readTree("{\"id\":\"SEC\",\"classification\":\"Restricted\"}")).orElseThrow()
+                .classification()).containsExactly("Restricted");
+        assertThat(api.queue(MAPPER.readTree("{\"id\":\"SEC\",\"classification\":[\"Internal\",\"Restricted\"]}"))
+                .orElseThrow().classification()).containsExactly("Internal", "Restricted");
+        assertThat(api.queue(MAPPER.readTree("{\"id\":\"SEC\",\"classification\":[]}")).orElseThrow().classification())
+                .isEmpty();
+    }
+
+    @Test
+    void aClassificationThatCannotBeReadIsAnErrorNotAnUnclassifiedQueue() {
+        for (String classification : new String[] {"{\"a\":1}", "[1]", "[\"ok\",{\"x\":1}]", "7", "true",
+                "\"" + "x".repeat(65) + "\"", "\"re\\u200Bstricted\""}) {
+            assertThatThrownBy(() -> api.queue(MAPPER.readTree("{\"id\":\"SEC\",\"classification\":" + classification + "}")))
+                    .as(classification).isInstanceOf(BackendResponseException.class);
+        }
+    }
+
+    @Test
+    void aQueueWithoutAValidIdIsNotTrusted() {
+        for (String body : new String[] {"{}", "{\"id\":null}", "{\"id\":\"IT/..\"}", "{\"id\":{\"a\":1}}"}) {
+            assertThat(api.queue(MAPPER.readTree(body))).as(body).isEmpty();
+        }
+    }
+
+    @Test
+    void theQueuePathNeedsItsPlaceholder() {
+        ServicedeskApiProperties ok = reference();
+        assertInvalid("http://sd.internal", new ServicedeskApiProperties(null, ok.ticketPath(),
+                new ServicedeskApiProperties.Queue("/api/queues", "/id", ""), ok.search(), ok.note(), ok.fields()),
+                "queue.path");
+        assertInvalid("http://sd.internal", new ServicedeskApiProperties(null, ok.ticketPath(),
+                new ServicedeskApiProperties.Queue("/api/queues/{queue}", "", ""), ok.search(), ok.note(), ok.fields()),
+                "queue.id-pointer");
+    }
+
     private static ServicedeskApiProperties with(ServicedeskApiProperties p, String ticketPath) {
-        return new ServicedeskApiProperties(p.credentialHeader(), ticketPath, p.search(), p.note(), p.fields());
+        return new ServicedeskApiProperties(p.credentialHeader(), ticketPath, QUEUE, p.search(), p.note(), p.fields());
     }
 
     private static void assertInvalid(String baseUrl, ServicedeskApiProperties properties, String mentioned) {

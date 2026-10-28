@@ -12,6 +12,7 @@ import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.time.Duration;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.Map;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -32,7 +33,7 @@ import tools.jackson.databind.json.JsonMapper;
 @ActiveProfiles("dev")
 @TestPropertySource(properties = {
         "servicedesk.access.credential-mode=service-account",
-        "servicedesk.access.allowed-queues=IT,OPS,GONE"})
+        "servicedesk.access.allowed-queues=IT,OPS,GONE,SEC"})
 abstract class ServerTestSupport {
 
     /** The platform's service account for the service desk, as the gateway injects it (C3). */
@@ -46,6 +47,18 @@ abstract class ServerTestSupport {
 
     static final TestGateway GATEWAY = TestGateway.start(SERVER_ID);
     static final StubBackend BACKEND = StubBackend.start();
+
+    /**
+     * The caller of most tests: may call the read and write tools and is granted the queues IT, OPS, SEC and GONE
+     * (not FIN) in the scope mapping of {@link TestPolicyBundle}.
+     */
+    static final List<String> CALLER_GROUPS = List.of("mcp-servicedesk-read", "mcp-servicedesk-write",
+            "mcp-servicedesk-queue-IT", "mcp-servicedesk-queue-OPS", "mcp-servicedesk-queue-SEC",
+            "mcp-servicedesk-queue-GONE");
+
+    static {
+        TestPolicyBundle.publish(GATEWAY.main());
+    }
 
     @DynamicPropertySource
     static void environment(DynamicPropertyRegistry registry) {
@@ -79,7 +92,10 @@ abstract class ServerTestSupport {
     /** Same, with the JWT claims of the caller set by {@code user} (a call through a link carries {@code vs}). */
     McpSyncClient clientAs(java.util.function.Consumer<TestGateway.Token> user, String credential,
             BackendCredential.Type type) {
-        McpSyncHttpClientRequestCustomizer gateway = GATEWAY.asGateway(user, credential, type);
+        McpSyncHttpClientRequestCustomizer gateway = GATEWAY.asGateway(token -> {
+            token.groups(CALLER_GROUPS);
+            user.accept(token);
+        }, credential, type);
         HttpClientStreamableHttpTransport transport = HttpClientStreamableHttpTransport.builder(baseUrl())
                 .endpoint(ENDPOINT)
                 .openConnectionOnStartup(false)
@@ -141,7 +157,7 @@ abstract class ServerTestSupport {
 
     /** The one answer for missing, hidden and disallowed tickets and queues; compared byte for byte. */
     static final String NOT_FOUND_OR_DENIED = "{\"error\":\"not_found_or_denied\","
-            + "\"message\":\"The ticket or queue does not exist or you have no access to it.\"}";
+            + "\"message\":\"The resource does not exist or you do not have access to it.\"}";
 
     static String text(McpSchema.CallToolResult result) {
         StringBuilder text = new StringBuilder();

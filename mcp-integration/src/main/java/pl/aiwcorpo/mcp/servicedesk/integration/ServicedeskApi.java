@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.regex.Matcher;
@@ -13,6 +14,9 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.web.util.UriComponentsBuilder;
 import pl.aiwcorpo.mcp.platform.security.BackendCredential;
+import pl.aiwcorpo.mcp.platform.text.TextHygiene;
+import pl.aiwcorpo.mcp.servicedesk.core.domain.Identifiers;
+import pl.aiwcorpo.mcp.servicedesk.core.domain.Queue;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 import tools.jackson.databind.node.ObjectNode;
@@ -24,6 +28,7 @@ import tools.jackson.databind.node.ObjectNode;
  */
 public final class ServicedeskApi {
 
+    private static final int CLASSIFICATION_MAX = 64;
     private static final Pattern PATH = Pattern.compile("/[A-Za-z0-9/_.{}-]*");
     private static final Pattern PLACEHOLDER = Pattern.compile("\\{([^}]*)}");
     private static final Pattern PARAM = Pattern.compile("[A-Za-z0-9_.\\[\\]-]{1,64}");
@@ -34,6 +39,9 @@ public final class ServicedeskApi {
     private final URI baseUrl;
     private final String credentialHeader;
     private final String ticketPath;
+    private final String queuePath;
+    private final String queueIdPointer;
+    private final String queueClassificationPointer;
     private final String searchPath;
     private final String searchQueueParam;
     private final String searchTextParam;
@@ -50,13 +58,17 @@ public final class ServicedeskApi {
     public ServicedeskApi(String baseUrl, ServicedeskApiProperties properties, JsonMapper mapper) {
         this.mapper = mapper;
         this.baseUrl = requireBaseUrl(baseUrl);
-        if (properties == null || properties.search() == null || properties.note() == null
-                || properties.fields() == null) {
-            throw invalid("servicedesk.api.search, .note and .fields must be configured");
+        if (properties == null || properties.queue() == null || properties.search() == null
+                || properties.note() == null || properties.fields() == null) {
+            throw invalid("servicedesk.api.queue, .search, .note and .fields must be configured");
         }
         this.credentialHeader = blank(properties.credentialHeader()) ? HttpHeaders.AUTHORIZATION
                 : require(properties.credentialHeader(), HEADER, "servicedesk.api.credential-header");
         this.ticketPath = path(properties.ticketPath(), "servicedesk.api.ticket-path", Set.of("ticketId"));
+        this.queuePath = path(properties.queue().path(), "servicedesk.api.queue.path", Set.of("queue"));
+        this.queueIdPointer = require(properties.queue().idPointer(), POINTER, "servicedesk.api.queue.id-pointer");
+        this.queueClassificationPointer = optionalPointer(properties.queue().classificationPointer(),
+                "servicedesk.api.queue.classification-pointer");
 
         ServicedeskApiProperties.Search search = properties.search();
         Set<String> searchPlaceholders = placeholders(search.path());
@@ -90,6 +102,10 @@ public final class ServicedeskApi {
 
     URI ticketUri(String ticketId) {
         return builder(ticketPath).encode().buildAndExpand(Map.of("ticketId", ticketId)).toUri();
+    }
+
+    URI queueUri(String queue) {
+        return builder(queuePath).encode().buildAndExpand(Map.of("queue", queue)).toUri();
     }
 
     URI noteUri(String ticketId) {
@@ -129,11 +145,50 @@ public final class ServicedeskApi {
             return "";
         }
         String id = TicketJson.scalar(response.at(noteIdPointer));
-        return id != null && pl.aiwcorpo.mcp.servicedesk.core.domain.Identifiers.isTicketId(id) ? id : "";
+        return id != null && Identifiers.isTicketId(id) ? id : "";
     }
 
     JsonNode results(JsonNode response) {
         return resultsPointer.isEmpty() ? response : response.at(resultsPointer);
+    }
+
+    /** The queue of a response; empty when its id is missing or not a queue id (it is then not trusted as a queue). */
+    Optional<Queue> queue(JsonNode node) {
+        String id = TicketJson.scalar(node.at(queueIdPointer));
+        if (!Identifiers.isQueueId(id)) {
+            return Optional.empty();
+        }
+        return Optional.of(new Queue(id, classification(queueClassificationPointer.isEmpty() ? null
+                : node.at(queueClassificationPointer))));
+    }
+
+    /**
+     * Absent or null is "no classification". Anything else that is not a string or an array of short strings is a
+     * response the server cannot judge, and judging it as "not classified" would open the queue.
+     */
+    private static List<String> classification(JsonNode node) {
+        if (node == null || node.isMissingNode() || node.isNull()) {
+            return null;
+        }
+        List<String> values = new ArrayList<>();
+        if (node.isString()) {
+            values.add(node.asString());
+        } else if (node.isArray()) {
+            for (JsonNode element : node) {
+                if (!element.isString()) {
+                    throw new BackendResponseException("queue classification not readable");
+                }
+                values.add(element.asString());
+            }
+        } else {
+            throw new BackendResponseException("queue classification not readable");
+        }
+        for (String value : values) {
+            if (value.length() > CLASSIFICATION_MAX || TextHygiene.firstProblem(value, false) != null) {
+                throw new BackendResponseException("queue classification not readable");
+            }
+        }
+        return values;
     }
 
     TicketJson ticketJson() {

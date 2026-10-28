@@ -29,7 +29,9 @@ import java.util.concurrent.atomic.AtomicInteger;
  * {@code NOQ-1} has no queue, notes on {@code IT-2} are 403, notes on {@code IT-NOTE401} are 401. Search lists
  * the tickets indexed under a queue, reporting each one's current queue: FIN-7 (not allowed) and OPS-5 (allowed)
  * are also indexed under IT (cross-queue match) and MOVED-3 stays indexed under IT after a move (stale index).
- * Queue GONE answers 404. Unusable answers: {@code IT-BADJSON} is 200 with a body that is not JSON and carries
+ * Queue GONE answers 404. Queues: IT and FIN report no classification, OPS "Internal", SEC "Restricted" (served by
+ * the server's list, refused by the policy); {@code SEC-1} is in SEC. {@code STALE-1} is in OPS but the search index
+ * still reports it in IT. Unusable answers: {@code IT-BADJSON} is 200 with a body that is not JSON and carries
  * {@link #BODY_MARKER}, {@code IT-302} redirects to a second server that records whether anything followed,
  * {@code IT-SLOW} answers after {@link #SLOW_MILLIS}, {@code IT-HUGE} is {@link #HUGE_BYTES} long.
  * Requests without a credential or with {@link #EXPIRED_CREDENTIAL} get 401.
@@ -119,7 +121,9 @@ final class StubBackend {
                 new StubTicket("IT-NOTE401", "IT", Set.of()),
                 new StubTicket("OPS-5", "OPS", Set.of("OPS", "IT")),
                 new StubTicket("FIN-7", "FIN", Set.of("FIN", "IT")),
-                new StubTicket("MOVED-3", "IT", Set.of("IT")))) {
+                new StubTicket("MOVED-3", "IT", Set.of("IT")),
+                new StubTicket("SEC-1", "SEC", Set.of("SEC")),
+                new StubTicket("STALE-1", "OPS", Set.of("IT")))) {
             tickets.put(ticket.id(), ticket);
         }
     }
@@ -136,7 +140,9 @@ final class StubBackend {
             return;
         }
         String[] segments = path.substring("/api/v1/".length()).split("/");
-        if (segments.length == 3 && segments[0].equals("queues") && segments[2].equals("tickets")
+        if (segments.length == 2 && segments[0].equals("queues") && method.equals("GET")) {
+            queue(exchange, segments[1]);
+        } else if (segments.length == 3 && segments[0].equals("queues") && segments[2].equals("tickets")
                 && method.equals("GET")) {
             search(exchange, segments[1], query);
         } else if (segments.length == 2 && segments[0].equals("tickets") && method.equals("GET")) {
@@ -146,6 +152,15 @@ final class StubBackend {
             note(exchange, segments[1]);
         } else {
             respond(exchange, 404, "{\"message\":\"no such endpoint\"}");
+        }
+    }
+
+    private void queue(HttpExchange exchange, String id) throws IOException {
+        switch (id) {
+            case "IT", "FIN" -> respond(exchange, 200, "{\"id\":\"" + id + "\",\"name\":\"Queue " + id + "\"}");
+            case "OPS" -> respond(exchange, 200, "{\"id\":\"OPS\",\"classification\":\"Internal\"}");
+            case "SEC" -> respond(exchange, 200, "{\"id\":\"SEC\",\"classification\":[\"Restricted\"]}");
+            default -> respond(exchange, 404, "{\"message\":\"no such queue\"}");
         }
     }
 
@@ -246,7 +261,7 @@ final class StubBackend {
         return """
                 {"id":"%s","queue":"%s","subject":"Printer on floor 3 (%s)","status":"open",
                  "updatedAt":"2026-10-21T09:30:00Z","requester":{"email":"jkowalski@corp.internal"}}"""
-                .formatted(ticket.id(), ticket.queue(), ticket.id());
+                .formatted(ticket.id(), ticket.id().startsWith("STALE") ? "IT" : ticket.queue(), ticket.id());
     }
 
     private static void respond(HttpExchange exchange, int status, String json) throws IOException {

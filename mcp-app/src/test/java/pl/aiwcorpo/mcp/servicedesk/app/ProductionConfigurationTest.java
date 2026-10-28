@@ -23,6 +23,7 @@ class ProductionConfigurationTest {
 
     private static final ServicedeskApiProperties REFERENCE_API = new ServicedeskApiProperties(null,
             "/api/v1/tickets/{ticketId}",
+            new ServicedeskApiProperties.Queue("/api/v1/queues/{queue}", "/id", "/classification"),
             new ServicedeskApiProperties.Search("/api/v1/queues/{queue}/tickets", null, "q", "limit", "/items"),
             new ServicedeskApiProperties.Note("/api/v1/tickets/{ticketId}/notes", "POST", "/body", null, "/id"),
             new ServicedeskApiProperties.Fields("/id", "/queue", "/subject", "/status", "/priority", "/createdAt",
@@ -42,6 +43,19 @@ class ProductionConfigurationTest {
             Object clientAuth = document.getProperty("server.ssl.client-auth");
             assertThat(clientAuth == null || "need".equals(String.valueOf(clientAuth))).isTrue();
         });
+    }
+
+    @Test
+    void theProductionConfigurationNeedsTheSignedBundleAndKeepsItsStateButAllowsNoTestKeys() throws IOException {
+        PropertySource<?> base = new YamlPropertySourceLoader()
+                .load("application.yml", new ClassPathResource("application.yml")).getFirst();
+
+        assertThat(base.getProperty("aiwcorpo.mcp.platform.policy.main.url")).isNotNull();
+        assertThat(base.getProperty("aiwcorpo.mcp.platform.policy.main.public-key-file")).isNotNull();
+        assertThat(base.getProperty("aiwcorpo.mcp.platform.policy.state-dir")).isNotNull();
+        assertThat(base.getProperty("aiwcorpo.mcp.platform.policy.allow-test-keys")).isNull();
+        assertThat(String.valueOf(base.getProperty("aiwcorpo.mcp.platform.manifest.accepted-credential-types")))
+                .contains("service-account");
     }
 
     @Test

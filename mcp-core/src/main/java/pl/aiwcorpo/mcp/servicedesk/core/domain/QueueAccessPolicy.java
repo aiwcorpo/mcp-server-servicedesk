@@ -7,9 +7,9 @@ import java.util.Set;
  * the server is configured for one or because the gateway labelled the credential so, only queues listed in
  * {@code allowedQueues} are served, and an empty list serves none.
  *
- * <p>This is the single place where the starter's QueryScope and ResultFilter (beta, M3) will add the caller's
- * policy on top: it is asked before every backend call that names a queue and for every ticket a backend call
- * returns.
+ * <p>This is the server's own boundary, asked before every backend call that names a queue and for every ticket a
+ * backend call returns. The caller's policy (Cedar on the resolved queue and ticket, the grants and the link in
+ * {@code QueryScope}) is applied by the starter and the tools on top of it, never instead of it.
  *
  * @param mode          credential mode from the configuration
  * @param allowedQueues queues the server may serve; with {@link CredentialMode#USER_SECRET} an empty set means

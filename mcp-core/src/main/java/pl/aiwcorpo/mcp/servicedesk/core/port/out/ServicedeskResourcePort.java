@@ -2,6 +2,7 @@ package pl.aiwcorpo.mcp.servicedesk.core.port.out;
 
 import java.util.List;
 import java.util.Optional;
+import pl.aiwcorpo.mcp.servicedesk.core.domain.Queue;
 import pl.aiwcorpo.mcp.servicedesk.core.domain.Ticket;
 import pl.aiwcorpo.mcp.servicedesk.core.domain.TicketSummary;
 
@@ -18,6 +19,9 @@ public interface ServicedeskResourcePort {
     Optional<List<TicketSummary>> searchTickets(String queue, String text, int limit);
 
     Optional<Ticket> findTicket(String ticketId);
+
+    /** The queue with its classification, empty when the service desk does not show it to this credential. */
+    Optional<Queue> findQueue(String queueId);
 
     /** @return the note id the service desk reported (empty string when none), empty when the ticket is hidden */
     Optional<String> addNote(String ticketId, String body);

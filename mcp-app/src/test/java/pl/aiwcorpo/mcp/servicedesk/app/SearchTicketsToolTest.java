@@ -30,8 +30,13 @@ class SearchTicketsToolTest extends ServerTestSupport {
                     .as("hits of another queue (allowed or not) and a hit without a queue are dropped")
                     .doesNotContain("FIN-7", "OPS-5", "IT-9")
                     .doesNotContain("jkowalski@corp.internal");
-            assertThat(BACKEND.requests()).containsExactly("GET /api/v1/queues/IT/tickets?q=printer&limit=21");
-            assertThat(BACKEND.authorizations()).containsExactly(SERVICE_KEY);
+            assertThat(text(result)).as("STALE-1 is listed under IT by a lagging index but is in OPS, which is served")
+                    .contains("\"id\":\"STALE-1\"");
+            assertThat(BACKEND.requests()).containsExactly("GET /api/v1/queues/IT",
+                    "GET /api/v1/queues/IT/tickets?q=printer&limit=21",
+                    "GET /api/v1/tickets/IT-1", "GET /api/v1/queues/IT", "GET /api/v1/tickets/IT-2",
+                    "GET /api/v1/tickets/MOVED-3", "GET /api/v1/tickets/STALE-1", "GET /api/v1/queues/OPS");
+            assertThat(BACKEND.authorizations()).hasSize(8).containsOnly(SERVICE_KEY);
         }
     }
 
@@ -42,7 +47,7 @@ class SearchTicketsToolTest extends ServerTestSupport {
                     Map.of("queue", "IT", "text", "x&limit=1000&queue=FIN #/../FIN"));
 
             assertThat(result.isError()).isFalse();
-            assertThat(BACKEND.requests()).singleElement().asString()
+            assertThat(BACKEND.requests().get(1))
                     .startsWith("GET /api/v1/queues/IT/tickets?q=x%26limit%3D1000%26queue%3DFIN%20%23%2F..%2FFIN")
                     .endsWith("&limit=21");
         }
@@ -97,6 +102,7 @@ class SearchTicketsToolTest extends ServerTestSupport {
             assertInvalidArgument(call(client, "search_tickets", Map.of("text", "printer")), "");
             assertInvalidArgument(call(client, "search_tickets", Map.of("queue", "IT", "text", "x", "jql", "1=1")), "");
         }
-        assertThat(BACKEND.requests()).isEmpty();
+        assertThat(BACKEND.requests()).as("the blank text got as far as the queue lookup and no further")
+                .containsExactly("GET /api/v1/queues/IT");
     }
 }
