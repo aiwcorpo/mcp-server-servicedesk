@@ -1,9 +1,13 @@
 package pl.aiwcorpo.mcp.servicedesk.integration;
 
 import java.text.Normalizer;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import org.jsoup.Jsoup;
+import org.jsoup.parser.Parser;
 import org.jspecify.annotations.Nullable;
 import pl.aiwcorpo.mcp.platform.text.TextHygiene;
 import pl.aiwcorpo.mcp.platform.text.UntrustedText;
@@ -30,20 +34,54 @@ final class PlainText {
     private static final Pattern SPACES = Pattern.compile("[ \\t\\u00A0]+");
     private static final Pattern BLANK_LINES = Pattern.compile("\\n\\s*\\n\\s*\\n+");
 
+    private static final Pattern MARKDOWN_LINK = Pattern.compile("!?\\[([^\\]]*)]\\([^)]*\\)|!?\\[([^\\]]*)]\\[[^\\]]*]");
+    // Some of these are letters to Unicode (Hangul fillers), so reducing to letters and digits would keep them.
+    private static final Pattern DEFAULT_IGNORABLE = Pattern.compile("[\\u00AD\\u034F\\u061C\\u115F\\u1160\\u17B4\\u17B5"
+            + "\\u180B-\\u180F\\u200B-\\u200F\\u202A-\\u202E\\u2060-\\u206F\\u3164\\uFE00-\\uFE0F\\uFEFF\\uFFA0"
+            + "\\uFFF0-\\uFFF8\\x{1BCA0}-\\x{1BCA3}\\x{1D173}-\\x{1D17A}\\x{E0000}-\\x{E0FFF}]");
+    private static final int DECODE_ROUNDS = 5;
     private static final Pattern NOT_LETTER_OR_DIGIT = Pattern.compile("[^\\p{L}\\p{N}]+");
 
     private PlainText() {
     }
 
     /**
-     * Whether {@code text} contains {@code phrase} once invisible characters, compatibility forms (NFKC: full
-     * width and the like), case, spacing, Markdown escapes and everything else but letters and digits are gone.
-     * It looks at the raw text on purpose: the note goes to the service desk through {@link #escapedForNote}, so
-     * entities and tags in it are shown literally and cannot turn into the phrase. Look-alike letters from other
-     * alphabets are not mapped.
+     * Whether {@code text} could read as {@code phrase} to anyone downstream, fail-closed. The note is checked in
+     * every form a reader or a further system might make of it: as it is; fully decoded as HTML5 (entities with
+     * and without a semicolon, tags removed), repeated to a fixed point because another system may decode again;
+     * and each of these with Markdown link and image syntax reduced to its visible text. Every form goes through
+     * {@link TextHygiene#normalize}, NFKC, removal of default-ignorable characters and reduction to lower-case
+     * letters and digits. The note is sent escaped ({@link #escapedForNote}), which is the first line of defence;
+     * this check does not rely on it. Look-alike letters from other alphabets are not mapped.
      */
     static boolean contains(String text, String phrase) {
-        return reduced(text).contains(reduced(phrase));
+        String wanted = reduced(phrase);
+        for (String form : forms(text)) {
+            if (reduced(form).contains(wanted) || reduced(MARKDOWN_LINK.matcher(form).replaceAll("$1$2")).contains(wanted)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static List<String> forms(String text) {
+        List<String> forms = new ArrayList<>();
+        forms.add(text);
+        String unescaped = text;
+        String parsed = text;
+        for (int round = 0; round < DECODE_ROUNDS; round++) {
+            String nextUnescaped = Parser.unescapeEntities(unescaped, false);
+            String nextParsed = Jsoup.parse(parsed).wholeText();
+            if (nextUnescaped.equals(unescaped) && nextParsed.equals(parsed)) {
+                break;
+            }
+            forms.add(nextUnescaped);
+            forms.add(nextParsed);
+            forms.add(Jsoup.parse(nextUnescaped).wholeText());
+            unescaped = nextUnescaped;
+            parsed = nextParsed;
+        }
+        return forms;
     }
 
     /**
@@ -69,7 +107,8 @@ final class PlainText {
 
     private static String reduced(String text) {
         String compatible = Normalizer.normalize(TextHygiene.normalize(text), Normalizer.Form.NFKC);
-        return NOT_LETTER_OR_DIGIT.matcher(compatible).replaceAll("").toLowerCase(Locale.ROOT);
+        String visible = DEFAULT_IGNORABLE.matcher(compatible).replaceAll("");
+        return NOT_LETTER_OR_DIGIT.matcher(visible).replaceAll("").toLowerCase(Locale.ROOT);
     }
 
     /** Free text of a ticket (subject, description) as untrusted data; {@code null} when there is no text. */

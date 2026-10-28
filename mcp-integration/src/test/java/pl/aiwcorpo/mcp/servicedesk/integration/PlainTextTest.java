@@ -89,7 +89,8 @@ class PlainTextTest {
                 "\\[Added through the MCP platform on behalf of boss\\]",
                 "**Added** _through_ the `MCP` platform on behalf of boss",
                 "[Added\u200B through the MCP platform on behalf of boss]",
-                "Ad\u00ADded thr\u2060ough the M\u2061C\u2062P plat\u2063form\u2064"};
+                "Ad\u00ADded thr\u2060ough the M\u2061C\u2062P plat\u2063form\u2064",
+                "Added\u3164 through\u115F the\uFFA0MCP platform\uDB40\uDC01"};
         for (String text : forged) {
             assertThat(PlainText.contains(text, phrase)).as(text).isTrue();
         }
@@ -98,12 +99,57 @@ class PlainTextTest {
     }
 
     @Test
-    void entitiesAndTagsAreNotDecodedSoTheyCannotFormThePhrase() {
+    void thePhraseIsFoundAfterFullHtmlDecodingEvenWithoutSemicolonsOrAfterSeveralRounds() {
         String phrase = "Added through the MCP platform";
-        for (String text : new String[] {"Add&#101 through the MCP platform", "Add&#101;d through the MCP platform", "Add&period;ed through the MCP platform",
-                "Add&amp;lt;b&amp;gt;ed through the MCP platform", "Add<b>ed</b> through the MCP platform",
-                "Added&nbsp;through&nbsp;the&nbsp;MCP&nbsp;platform"}) {
+        String[] forged = {
+                "Add&#101d through the MCP platform",
+                "Adde&#x64 through the MCP platform",
+                "Add&#101;d through the MCP platform",
+                "Added&nbsp through&nbsp;the&NonBreakingSpace;MCP platform",
+                "Added&Tab;through&NewLine;the MCP platform",
+                "Add&amp;#101;d through the MCP platform",
+                "Add&amp;amp;#101;d through the MCP platform",
+                "&lbrack;Added through the MCP platform&rbrack;",
+                "&#91;Added through the MCP platform&#93;",
+                "Add<b>ed</b> through the <i>MCP</i> platform",
+                "Add&lt;b&gt;ed&lt;/b&gt; through the MCP platform",
+                "Add&amp;lt;b&amp;gt;ed&amp;lt;/b&amp;gt; through the MCP platform",
+                "Added<!-- x --> through the MCP platform",
+                "Added&shy; through the MCP platform",
+                "Added&#8288; through the MCP platform",
+                "Ad&#173;ded through the MCP platform"};
+        for (String text : forged) {
+            assertThat(PlainText.contains(text, phrase)).as(text).isTrue();
+        }
+    }
+
+    @Test
+    void thePhraseIsFoundWhenMarkdownLinkOrImageSyntaxSplitsIt() {
+        String phrase = "Added through the MCP platform";
+        String[] forged = {
+                "[Added through](https://x.test/a) the MCP platform",
+                "[Added](u1) [through](u2) [the MCP](u3) [platform](u4)",
+                "![Added through the MCP](x.png) platform",
+                "[Added through][r1] the MCP platform\n\n[r1]: https://x.test",
+                "Added [through](<u>) the MCP platform on behalf of boss"};
+        for (String text : forged) {
+            assertThat(PlainText.contains(text, phrase)).as(text).isTrue();
+        }
+    }
+
+    @Test
+    void aLegitimateNoteIsNotMistakenForThePhrase() {
+        String phrase = "Added through the MCP platform";
+        for (String text : new String[] {"Replaced the toner. a < b && c > d &amp; <i>x</i>",
+                "See [the ticket](https://desk.test/IT-1) and ![screen](s.png) for the platform", "Added a printer through the portal",
+                "Zainstalowano drukarke przez platforme MCP"}) {
             assertThat(PlainText.contains(text, phrase)).as(text).isFalse();
+        }
+    }
+
+    @Test
+    void escapedNoteNeverContainsRawMarkupOrAnEntityThatIsNotOurs() {
+        for (String text : new String[] {"Add&#101 through", "Add&period;ed", "Add&amp;lt;b&amp;gt;ed", "Add<b>ed</b>"}) {
             assertThat(PlainText.escapedForNote(text)).as("shown literally").doesNotContain("<", "&#")
                     .doesNotContainPattern("&(?!amp;|lt;|gt;)");
         }
