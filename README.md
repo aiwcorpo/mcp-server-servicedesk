@@ -1,6 +1,6 @@
 # mcp-servicedesk: serwer MCP platformy
 
-Serwer MCP dla service desku, zbudowany na `mcp-platform-starter` 3.0.0-alpha-10 (Java 25, Spring Boot 4.1.0,
+Serwer MCP dla service desku, zbudowany na `mcp-platform-starter` 3.0.0-alpha-11 (Java 25, Spring Boot 4.1.0,
 Spring AI 2.0.0, kontrakty `mcp-contracts` 2.1.1). Stoi wyłącznie za gateway'em platformy: przyjmuje ruch tylko
 po mTLS z wewnętrznym JWT gateway'a (C2), a do service desku woła z poświadczeniem, które gateway dołącza do
 każdego żądania (C3). Bez poprawnego JWT odpowiada 401, nie ma trybu anonimowego.
