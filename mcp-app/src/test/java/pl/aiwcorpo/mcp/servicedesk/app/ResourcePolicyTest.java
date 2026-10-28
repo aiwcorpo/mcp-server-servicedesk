@@ -178,4 +178,40 @@ class ResourcePolicyTest extends ServerTestSupport {
         }
         assertThat(BACKEND.requests()).noneMatch(request -> request.contains("/tickets?"));
     }
+
+    @Test
+    void theServiceAccountReadsAndWritesOnlyInQueuesTheCallerIsGranted() {
+        List<String> itOnly = List.of("mcp-servicedesk-read", "mcp-servicedesk-write", "mcp-servicedesk-queue-IT");
+        try (McpSyncClient client = clientAs(user -> user.groups(itOnly), SERVICE_KEY,
+                BackendCredential.Type.SERVICE_ACCOUNT)) {
+            McpSchema.CallToolResult missing = call(client, "get_ticket", Map.of("ticketId", "NOPE-1"));
+            McpSchema.CallToolResult otherQueue = call(client, "get_ticket", Map.of("ticketId", "OPS-5"));
+            McpSchema.CallToolResult note = call(client, "add_note", Map.of("ticketId", "OPS-5", "body", "x"));
+
+            assertNotFoundOrDenied(otherQueue);
+            assertNotFoundOrDenied(note);
+            assertThat(text(otherQueue)).isEqualTo(text(missing));
+            assertThat(call(client, "get_ticket", Map.of("ticketId", "IT-1")).isError()).isFalse();
+            assertThat(call(client, "add_note", Map.of("ticketId", "IT-1", "body", "x")).isError()).isFalse();
+        }
+        assertThat(BACKEND.noteBodies()).hasSize(1).allMatch(note -> note.startsWith("IT-1 "));
+
+        List<String> withOps = List.of("mcp-servicedesk-read", "mcp-servicedesk-write", "mcp-servicedesk-queue-OPS");
+        try (McpSyncClient client = clientAs(user -> user.groups(withOps), SERVICE_KEY,
+                BackendCredential.Type.SERVICE_ACCOUNT)) {
+            assertThat(call(client, "get_ticket", Map.of("ticketId", "OPS-5")).isError()).isFalse();
+            assertThat(call(client, "add_note", Map.of("ticketId", "OPS-5", "body", "x")).isError()).isFalse();
+        }
+    }
+
+    @Test
+    void aCallerWithoutAnyQueueGroupGetsNothingThroughTheServiceAccount() {
+        try (McpSyncClient client = clientAs(
+                user -> user.groups(List.of("mcp-servicedesk-read", "mcp-servicedesk-write")), SERVICE_KEY,
+                BackendCredential.Type.SERVICE_ACCOUNT)) {
+            assertNotFoundOrDenied(call(client, "get_ticket", Map.of("ticketId", "IT-1")));
+            assertNotFoundOrDenied(call(client, "add_note", Map.of("ticketId", "IT-1", "body", "x")));
+        }
+        assertThat(BACKEND.noteBodies()).isEmpty();
+    }
 }

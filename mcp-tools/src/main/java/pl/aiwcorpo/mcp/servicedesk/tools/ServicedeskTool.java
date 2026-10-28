@@ -20,6 +20,7 @@ import pl.aiwcorpo.mcp.servicedesk.core.domain.ClassifiedTicket;
 import pl.aiwcorpo.mcp.servicedesk.core.domain.NoteReceipt;
 import pl.aiwcorpo.mcp.servicedesk.core.domain.ServicedeskResourceModel;
 import pl.aiwcorpo.mcp.servicedesk.core.domain.Ticket;
+import pl.aiwcorpo.mcp.servicedesk.core.domain.TicketNotFoundException;
 import pl.aiwcorpo.mcp.servicedesk.core.domain.TicketSearch;
 import pl.aiwcorpo.mcp.servicedesk.core.port.in.ServicedeskUseCase;
 
@@ -85,6 +86,7 @@ public class ServicedeskTool {
         // The ticket the resolver fetched for the policy: the answer judged is the answer returned.
         ClassifiedTicket fetched = ResourceContext.current().orElseThrow()
                 .fetched(ServicedeskResourceModel.TICKET_TYPE, ticketId, ClassifiedTicket.class).orElseThrow();
+        requireInScope(fetched.ticket());
         return TicketView.of(fetched.ticket());
     }
 
@@ -98,8 +100,24 @@ public class ServicedeskTool {
             @ResourceRef(type = ServicedeskResourceModel.TICKET_TYPE) String ticketId,
             @ToolParam(description = "Note text, 1-10000 characters")
             @ArgumentLimits(minLength = 1, maxLength = NOTE_MAX) String body) {
-        NoteReceipt receipt = useCase.addNote(ticketId, validText("body", body, NOTE_MAX));
+        String note = validText("body", body, NOTE_MAX);
+        ClassifiedTicket fetched = ResourceContext.current().orElseThrow()
+                .fetched(ServicedeskResourceModel.TICKET_TYPE, ticketId, ClassifiedTicket.class).orElseThrow();
+        requireInScope(fetched.ticket());
+        NoteReceipt receipt = useCase.addNote(ticketId, note);
         return new NoteView(receipt.ticketId(), receipt.noteId());
+    }
+
+    /**
+     * The service account sees every queue, so for it the queue the service desk reports for the ticket now must be
+     * one the caller's groups grant (and the link allows): CC-076, no scope means no access. Same answer as a missing
+     * ticket, raised before anything is written or returned.
+     */
+    private void requireInScope(Ticket ticket) {
+        QueryScope scope = policy.queryScope(ServicedeskResourceModel.QUEUE_TYPE);
+        if (!ServicedeskSearchScope.permits(scope, ticket.queue(), useCase.serviceAccountCall())) {
+            throw new TicketNotFoundException();
+        }
     }
 
     private static String validText(String name, String value, int max) {

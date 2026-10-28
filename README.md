@@ -1,6 +1,6 @@
 # mcp-servicedesk: serwer MCP platformy
 
-Serwer MCP dla service desku, zbudowany na `mcp-platform-starter` 3.0.0-beta-2 (Java 25, Spring Boot 4.1.0,
+Serwer MCP dla service desku, zbudowany na `mcp-platform-starter` 3.0.0-beta-3 (Java 25, Spring Boot 4.1.0,
 Spring AI 2.0.0, kontrakty `mcp-contracts` 3.1.0). Stoi wyłącznie za gateway'em platformy: przyjmuje ruch tylko
 po mTLS z wewnętrznym JWT gateway'a (C2), a do service desku woła z poświadczeniem, które gateway dołącza do
 każdego żądania (C3). Bez poprawnego JWT odpowiada 401, nie ma trybu anonimowego.
@@ -100,6 +100,7 @@ chwili wywołania, nie na tym, co podał model:
 - `get_ticket`: resolver zgłoszenia pobiera je, sprawdza, że system zwrócił to samo `id` (inne `id`, np. alias albo
   scalenie, = odmowa) i że jego bieżąca kolejka jest dozwolona (zgłoszenie bez kolejki = odmowa), potem pyta o
   kolejkę (klasyfikacja); narzędzie czyta ten wynik, bez drugiego wywołania;
+- `get_ticket` i `add_note` dla konta serwisowego: bieżąca kolejka zgłoszenia musi być przyznana grupami wywołującego i dozwolona przez link, inaczej `not_found_or_denied` bez treści i bez zapisu;
 - `add_note`: ten sam resolver przed metodą, potem tylko zapis; przy odmowie nie ma żadnego zapisu;
 - `search_tickets`: kolejka z argumentu jest rozwiązywana (istnienie, klasyfikacja, lista serwera) zanim pójdzie
   zapytanie; dla konta serwisowego musi być też przyznana grupami wywołującego (`QueryScope.grantedIds()`, odpowiednik
@@ -285,7 +286,7 @@ hosta (`mcp-gateway/scripts/run-dev-host.sh`, JWKS na `localhost:18445`) skonfig
 
 ## Testy
 
-`./mvnw verify` (JDK 25, bez Dockera): 119 testów.
+`./mvnw verify` (JDK 25, bez Dockera): 121 testów.
 
 | Klasa | Co sprawdza |
 | --- | --- |

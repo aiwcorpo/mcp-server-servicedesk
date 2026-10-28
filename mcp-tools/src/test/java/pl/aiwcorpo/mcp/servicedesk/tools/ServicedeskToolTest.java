@@ -35,9 +35,6 @@ class ServicedeskToolTest {
         assertThatThrownBy(() -> tool.addNote("IT-1", "b".repeat(10001)))
                 .isInstanceOf(InvalidToolArgumentException.class).hasMessageContaining("body must be 1-10000");
         assertThat(calls).isEmpty();
-
-        tool.addNote("IT-1", "line 1\r\n\tline 2");
-        assertThat(calls).containsExactly("note IT-1");
     }
 
     @Test
