@@ -1,7 +1,6 @@
 package pl.aiwcorpo.mcp.servicedesk.tools;
 
 import java.util.List;
-import java.util.Locale;
 import org.jspecify.annotations.Nullable;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
@@ -59,9 +58,6 @@ public class ServicedeskTool {
         return TicketView.of(useCase.getTicket(validTicketId(ticketId)));
     }
 
-    /** The start of the line the adapter adds for the service account, without whitespace, lower case. */
-    private static final String ATTRIBUTION_MARKER = "[addedthroughthemcpplatform";
-
     @Tool(name = "add_note", description = "Adds a note to a service desk ticket. Returns the ticket id and "
             + "the note id when the service desk reports one.")
     @ToolRisk(RiskLevel.UPDATE)
@@ -70,7 +66,7 @@ public class ServicedeskTool {
             @ArgumentLimits(contractPattern = "ServiceDeskTicketId", minLength = 1, maxLength = ID_MAX) String ticketId,
             @ToolParam(description = "Note text, 1-10000 characters")
             @ArgumentLimits(minLength = 1, maxLength = NOTE_MAX) String body) {
-        NoteReceipt receipt = useCase.addNote(validTicketId(ticketId), validNote(body));
+        NoteReceipt receipt = useCase.addNote(validTicketId(ticketId), validText("body", body, NOTE_MAX));
         return new NoteView(receipt.ticketId(), receipt.noteId());
     }
 
@@ -86,22 +82,6 @@ public class ServicedeskTool {
             throw new InvalidToolArgumentException("ticketId must be 1-64 characters: letters, digits, '-' or '_'");
         }
         return ticketId;
-    }
-
-    /**
-     * The service account is the author of the note in the service desk, so the only statement of who asked for
-     * it is the line the adapter puts in front of the text. A body that carries that line itself would give the
-     * agent two attributions, and the second one would be the model's. Whitespace and case are ignored so that
-     * a line broken or spaced differently does not pass for the same line.
-     */
-    private static String validNote(String body) {
-        String text = validText("body", body, NOTE_MAX);
-        String compact = text.replaceAll("[\\s\\p{Z}]+", "").toLowerCase(Locale.ROOT);
-        if (compact.contains(ATTRIBUTION_MARKER)) {
-            throw new InvalidToolArgumentException("body must not contain the attribution line the platform adds "
-                    + "to notes");
-        }
-        return text;
     }
 
     private static String validText(String name, String value, int max) {

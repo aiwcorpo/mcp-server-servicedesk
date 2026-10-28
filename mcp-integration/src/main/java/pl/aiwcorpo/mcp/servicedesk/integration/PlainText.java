@@ -1,5 +1,7 @@
 package pl.aiwcorpo.mcp.servicedesk.integration;
 
+import java.text.Normalizer;
+import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.jspecify.annotations.Nullable;
@@ -28,7 +30,36 @@ final class PlainText {
     private static final Pattern SPACES = Pattern.compile("[ \\t\\u00A0]+");
     private static final Pattern BLANK_LINES = Pattern.compile("\\n\\s*\\n\\s*\\n+");
 
+    private static final Pattern HTML_TAG = Pattern.compile("</?[A-Za-z!][^>]*>");
+    private static final Pattern NOT_LETTER_OR_DIGIT = Pattern.compile("[^\\p{L}\\p{N}]+");
+    private static final int ENTITY_ROUNDS = 4;
+
     private PlainText() {
+    }
+
+    /**
+     * Whether {@code text} contains {@code phrase} as a reader of the service desk would read it, whatever it is
+     * dressed in: entities (decoded repeatedly, because a second decoding may happen downstream), tags
+     * (only things an HTML parser takes for a tag, so a stray {@code <} does not swallow what follows),
+     * full-width and other compatibility forms (NFKC), invisible characters, Markdown escapes and emphasis,
+     * brackets, case and spacing. Everything but letters and digits is dropped from both sides before comparing.
+     * Look-alike letters from other alphabets are not mapped.
+     */
+    static boolean contains(String text, String phrase) {
+        String current = text;
+        for (int round = 0; round < ENTITY_ROUNDS && current.indexOf('&') >= 0; round++) {
+            current = decodeEntities(current);
+        }
+        for (String previous = null; !current.equals(previous); ) {
+            previous = current;
+            current = HTML_TAG.matcher(current).replaceAll("");
+        }
+        return reduced(current).contains(reduced(phrase));
+    }
+
+    private static String reduced(String text) {
+        String compatible = Normalizer.normalize(TextHygiene.normalize(text), Normalizer.Form.NFKC);
+        return NOT_LETTER_OR_DIGIT.matcher(compatible).replaceAll("").toLowerCase(Locale.ROOT);
     }
 
     /** Free text of a ticket (subject, description) as untrusted data; {@code null} when there is no text. */

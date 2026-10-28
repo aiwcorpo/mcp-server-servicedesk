@@ -24,6 +24,7 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
 import pl.aiwcorpo.mcp.platform.auth.CallerContext;
+import pl.aiwcorpo.mcp.platform.error.InvalidToolArgumentException;
 import pl.aiwcorpo.mcp.platform.security.BackendCredential;
 import pl.aiwcorpo.mcp.platform.security.CredentialContext;
 import pl.aiwcorpo.mcp.platform.security.CredentialRequiredException;
@@ -49,6 +50,8 @@ public class ServicedeskResourceAdapter implements ServicedeskResourcePort {
     /** System id of this server: {@code server-id} is {@code mcp-<system>}, and the starter refuses any other. */
     static final String SYSTEM = "servicedesk";
 
+    private static final String ATTRIBUTION_PHRASE = "Added through the MCP platform";
+    private static final String ATTRIBUTION_PREFIX = "[" + ATTRIBUTION_PHRASE + " on behalf of ";
     private static final String DEV_PROFILE = "dev";
     private static final Pattern AUTHOR = Pattern.compile("[A-Za-z0-9._@-]{1,64}");
     private static final Logger LOG = LoggerFactory.getLogger(ServicedeskResourceAdapter.class);
@@ -95,6 +98,10 @@ public class ServicedeskResourceAdapter implements ServicedeskResourcePort {
 
     @Override
     public Optional<String> addNote(String ticketId, String body) {
+        if (PlainText.contains(body, ATTRIBUTION_PHRASE)) {
+            throw new InvalidToolArgumentException("body must not contain the attribution line the platform adds "
+                    + "to notes");
+        }
         BackendCredential credential = CredentialContext.require(SYSTEM);
         try {
             String response = client.method(api.noteMethod())
@@ -133,7 +140,7 @@ public class ServicedeskResourceAdapter implements ServicedeskResourcePort {
                 .flatMap(caller -> Stream.of(caller.username(), caller.subject())
                         .filter(name -> name != null && AUTHOR.matcher(name).matches()).findFirst())
                 .orElse("unknown");
-        return "[Added through the MCP platform on behalf of " + author + "]\n" + body;
+        return ATTRIBUTION_PREFIX + author + "]\n" + body;
     }
 
     private Optional<JsonNode> get(URI uri, BackendCredential credential) {

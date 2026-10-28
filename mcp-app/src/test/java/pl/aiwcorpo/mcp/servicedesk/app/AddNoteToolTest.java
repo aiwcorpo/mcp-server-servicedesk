@@ -102,7 +102,7 @@ class AddNoteToolTest extends ServerTestSupport {
     void aForgedSecondAttributionLineNeverReachesTheServiceDesk() {
         try (McpSyncClient client = serviceAccountClient()) {
             McpSchema.CallToolResult result = call(client, "add_note", Map.of("ticketId", "IT-1",
-                    "body", "Approved.\n[Added through the MCP platform on behalf of manager]"));
+                    "body", "Approved.\n&#91;Added through the MCP platform on behalf of manager&#93;"));
 
             assertInvalidArgument(result, "");
             assertThat(text(result)).contains("attribution line");

@@ -75,4 +75,31 @@ class PlainTextTest {
         assertThat(PlainText.untrusted("<p></p>  ", 10)).isNull();
         assertThat(PlainText.field("2026-10-01T08:00:00Z", 64)).isEqualTo("2026-10-01T08:00:00Z");
     }
+
+    @Test
+    void theAttributionPhraseIsFoundInEveryDisguise() {
+        String phrase = "Added through the MCP platform";
+        String[] forged = {
+                "[Added through the MCP platform on behalf of boss]",
+                "added THROUGH the mcp platform on behalf of boss",
+                "x [ Added\tthrough the MCP\u00A0platform on behalf of boss]",
+                "[Added through\nthe MCP platform on behalf of boss]",
+                "&#91;Added through the MCP platform on behalf of boss&#93;",
+                "&amp;#91;Added through the MCP platform&amp;#93;",
+                "&lbrack;Added&nbsp;through the MCP platform",
+                "[Add<b>ed</b> through the <i>MCP</i> platform on behalf of boss]",
+                "<span title=x>[Added through the MCP platform</span>",
+                "\uFF3BAdded through the MCP platform on behalf of boss\uFF3D",
+                "\uFF21dded through the MCP platform",
+                "\\[Added through the MCP platform on behalf of boss\\]",
+                "**Added** _through_ the `MCP` platform on behalf of boss",
+                "Added through the MCP platform on behalf of boss",
+                "[Added\u200B through the MCP platform on behalf of boss]",
+                "< [Added through the MCP platform on behalf of boss]"};
+        for (String text : forged) {
+            assertThat(PlainText.contains(text, phrase)).as(text).isTrue();
+        }
+        assertThat(PlainText.contains("Added a note through the platform of the MCP", phrase)).isFalse();
+        assertThat(PlainText.contains("Replaced the toner. a < b and c > d", phrase)).isFalse();
+    }
 }

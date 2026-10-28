@@ -46,8 +46,8 @@ BOM alpha-6 -> alpha-10 (kontrakty 2.1.1). Źródło: `MIGRATION-3.0.md`, alpha-
 | Claimy `vs` i `vsc:{}` | `GatewayLinkClaimsTest`: wywołanie `get_ticket` z `virtualServer("it-helpdesk", Map.of())` przechodzi |
 | Zgodność z mockiem ws-01 | nie sprawdzano (STATUS ws-01 nie obiecuje mocka z kształtem pól tego generycznego adaptera) |
 
-Weryfikacja: `./mvnw -B clean verify` (JDK 25) -> 86 testów, 0 błędów (mcp-app 50, mcp-integration 18, mcp-application 8,
-mcp-core 6, mcp-tools 4). Uruchomienie wg README: `dev` na 18530, health 200, `POST /mcp` bez JWT 401; proces zatrzymany.
+Weryfikacja: `./mvnw -B clean verify` (JDK 25) -> 86 testów, 0 błędów (mcp-app 50, mcp-integration 19, mcp-application 8,
+mcp-core 6, mcp-tools 3). Uruchomienie wg README: `dev` na 18530, health 200, `POST /mcp` bez JWT 401; proces zatrzymany.
 
 ## Co działa
 
@@ -155,5 +155,5 @@ Dopisane na końcu `mcp-contracts/CONTRACT_CHANGES.md` (status open, bez commitu
 
 | Znalezisko | Status | Dowód |
 | --- | --- | --- |
-| S3-L1 podrobiona druga linia atrybucji w notatce | poprawione odrzuceniem: `add_note` zwraca `invalid_argument`, gdy treść zawiera `[Added through the MCP platform` (wielkość liter i białe znaki, także twarda spacja, pomijane; w każdym miejscu treści, nie tylko na początku linii), przy obu rodzajach poświadczenia. Wybrane zamiast pola autora w API, bo adapter jest generyczny i nie zna wskaźnika autora. Poza zakresem: wizualne sobowtóry znaków (np. cyfra 1 zamiast `l`), których agent musiałby nie zauważyć, a to nie jest ta sama linia | `ServicedeskToolTest.aNoteCannotCarryTheAttributionLineOfThePlatform`, `AddNoteToolTest.aForgedSecondAttributionLineNeverReachesTheServiceDesk` (brak POST do systemu) |
+| S3-L1 podrobiona druga linia atrybucji w notatce | poprawione odrzuceniem w adapterze (`ServicedeskResourceAdapter.addNote`, przed jakimkolwiek wywołaniem): `invalid_argument`, gdy treść od modelu zawiera frazę `Added through the MCP platform` po sprowadzeniu do liter i cyfr: encje dekodowane do 4 razy, tagi HTML usuwane (tylko to, co parser uzna za tag), NFKC (pełna szerokość, formy zgodnościowe), `TextHygiene.normalize` (niewidoczne), bez znaków interpunkcji, nawiasów, escapów i znaczników Markdown, bez wielkości liter i odstępów. Sprawdzane w całej treści, nie tylko na początku linii, przy obu rodzajach poświadczenia. Pole autora w API odrzucone: adapter jest generyczny i nie ma wskaźnika autora (`servicedesk.api.note` zna tylko treść). Poza zakresem: sobowtóry liter z innych alfabetów (cyrylica) | `PlainTextTest.theAttributionPhraseIsFoundInEveryDisguise` (encje, tagi, pełna szerokość, escapy, bez nawiasów, podwójne kodowanie, znaki niewidoczne), `AddNoteToolTest.aForgedSecondAttributionLineNeverReachesTheServiceDesk` (brak POST do systemu) |
 | A10-M1 `DevProfileLoopbackTest` | bez zmian, rozwiąże starter alpha-11 | |
