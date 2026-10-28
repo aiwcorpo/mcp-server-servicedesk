@@ -103,6 +103,7 @@ public class ServicedeskResourceAdapter implements ServicedeskResourcePort {
                     + "to notes");
         }
         BackendCredential credential = CredentialContext.require(SYSTEM);
+        String text = PlainText.escapedForNote(body);
         try {
             String response = client.method(api.noteMethod())
                     .uri(api.noteUri(ticketId))
@@ -110,7 +111,7 @@ public class ServicedeskResourceAdapter implements ServicedeskResourcePort {
                     .contentType(MediaType.APPLICATION_JSON)
                     .accept(MediaType.APPLICATION_JSON)
                     .body(api.noteBody(credential.type() == BackendCredential.Type.SERVICE_ACCOUNT
-                            ? attributed(body) : body))
+                            ? attributed(text) : text))
                     .retrieve()
                     .body(String.class);
             return Optional.of(api.noteId(parseLeniently(response)));

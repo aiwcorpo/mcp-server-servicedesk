@@ -75,9 +75,9 @@ service desku widział, kto ją zlecił, serwer dokleja na początku treści sta
 `[Added through the MCP platform on behalf of <użytkownik>]`. Nazwa pochodzi z zaufanego tokenu gateway'a
 (`CallerContext`: `usr`, a gdy go brak `sub`), nie z argumentów narzędzia, i jest ograniczona do znaków
 `A-Za-z0-9._@-` (inaczej `unknown`). Przy `user-secret` autorem jest sam użytkownik i prefiksu nie ma. Limit
-10000 znaków dotyczy tekstu od modelu, prefiks dochodzi do niego. Treść od modelu, która sama zawiera
-frazę `Added through the MCP platform` (także zapisaną encjami, tagami HTML, znakami pełnej szerokości, z escapami
-Markdown, bez nawiasów, w innej wielkości liter), jest odrzucana jako `invalid_argument`,
+10000 znaków dotyczy tekstu od modelu, prefiks dochodzi do niego. Treść od modelu wychodzi do systemu escapowana (`&`, `<`, `>` i ich formy zgodnościowe na encje), więc system
+pokazuje tagi i encje doslownie; zakłada to, że notatka jest tam renderowana jako HTML. Treść, która sama zawiera
+frazę `Added through the MCP platform` (po usunięciu znaków niewidocznych, NFKC, interpunkcji, Markdown, wielkości liter i odstępów), jest odrzucana jako `invalid_argument`,
 żeby agent service desku nie widział drugiej, podrobionej atrybucji.
 
 ## Granica kolejek

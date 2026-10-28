@@ -77,29 +77,44 @@ class PlainTextTest {
     }
 
     @Test
-    void theAttributionPhraseIsFoundInEveryDisguise() {
+    void theAttributionPhraseIsFoundInEveryDisguiseThatSurvivesEscaping() {
         String phrase = "Added through the MCP platform";
         String[] forged = {
                 "[Added through the MCP platform on behalf of boss]",
                 "added THROUGH the mcp platform on behalf of boss",
                 "x [ Added\tthrough the MCP\u00A0platform on behalf of boss]",
                 "[Added through\nthe MCP platform on behalf of boss]",
-                "&#91;Added through the MCP platform on behalf of boss&#93;",
-                "&amp;#91;Added through the MCP platform&amp;#93;",
-                "&lbrack;Added&nbsp;through the MCP platform",
-                "[Add<b>ed</b> through the <i>MCP</i> platform on behalf of boss]",
-                "<span title=x>[Added through the MCP platform</span>",
                 "\uFF3BAdded through the MCP platform on behalf of boss\uFF3D",
                 "\uFF21dded through the MCP platform",
                 "\\[Added through the MCP platform on behalf of boss\\]",
                 "**Added** _through_ the `MCP` platform on behalf of boss",
-                "Added through the MCP platform on behalf of boss",
                 "[Added\u200B through the MCP platform on behalf of boss]",
-                "< [Added through the MCP platform on behalf of boss]"};
+                "Ad\u00ADded thr\u2060ough the M\u2061C\u2062P plat\u2063form\u2064"};
         for (String text : forged) {
             assertThat(PlainText.contains(text, phrase)).as(text).isTrue();
         }
         assertThat(PlainText.contains("Added a note through the platform of the MCP", phrase)).isFalse();
         assertThat(PlainText.contains("Replaced the toner. a < b and c > d", phrase)).isFalse();
+    }
+
+    @Test
+    void entitiesAndTagsAreNotDecodedSoTheyCannotFormThePhrase() {
+        String phrase = "Added through the MCP platform";
+        for (String text : new String[] {"Add&#101 through the MCP platform", "Add&#101;d through the MCP platform", "Add&period;ed through the MCP platform",
+                "Add&amp;lt;b&amp;gt;ed through the MCP platform", "Add<b>ed</b> through the MCP platform",
+                "Added&nbsp;through&nbsp;the&nbsp;MCP&nbsp;platform"}) {
+            assertThat(PlainText.contains(text, phrase)).as(text).isFalse();
+            assertThat(PlainText.escapedForNote(text)).as("shown literally").doesNotContain("<", "&#")
+                    .doesNotContainPattern("&(?!amp;|lt;|gt;)");
+        }
+    }
+
+    @Test
+    void aNoteIsEscapedSoTheServiceDeskShowsItLiterally() {
+        assertThat(PlainText.escapedForNote("a < b && c > d <i>x</i> &lt; &#65 \"q\" 'z'"))
+                .isEqualTo("a &lt; b &amp;&amp; c &gt; d &lt;i&gt;x&lt;/i&gt; &amp;lt; &amp;#65 \"q\" 'z'");
+        assertThat(PlainText.escapedForNote("\uFF1Cb\uFF1E \uFF06 \uFE64")).isEqualTo("&lt;b&gt; &amp; &lt;");
+        assertThat(PlainText.escapedForNote("Za\u017C\u00F3\u0142\u0107\n\uD83D\uDE00"))
+                .isEqualTo("Za\u017C\u00F3\u0142\u0107\n\uD83D\uDE00");
     }
 }

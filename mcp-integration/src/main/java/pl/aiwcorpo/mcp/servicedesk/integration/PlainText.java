@@ -30,31 +30,41 @@ final class PlainText {
     private static final Pattern SPACES = Pattern.compile("[ \\t\\u00A0]+");
     private static final Pattern BLANK_LINES = Pattern.compile("\\n\\s*\\n\\s*\\n+");
 
-    private static final Pattern HTML_TAG = Pattern.compile("</?[A-Za-z!][^>]*>");
     private static final Pattern NOT_LETTER_OR_DIGIT = Pattern.compile("[^\\p{L}\\p{N}]+");
-    private static final int ENTITY_ROUNDS = 4;
 
     private PlainText() {
     }
 
     /**
-     * Whether {@code text} contains {@code phrase} as a reader of the service desk would read it, whatever it is
-     * dressed in: entities (decoded repeatedly, because a second decoding may happen downstream), tags
-     * (only things an HTML parser takes for a tag, so a stray {@code <} does not swallow what follows),
-     * full-width and other compatibility forms (NFKC), invisible characters, Markdown escapes and emphasis,
-     * brackets, case and spacing. Everything but letters and digits is dropped from both sides before comparing.
-     * Look-alike letters from other alphabets are not mapped.
+     * Whether {@code text} contains {@code phrase} once invisible characters, compatibility forms (NFKC: full
+     * width and the like), case, spacing, Markdown escapes and everything else but letters and digits are gone.
+     * It looks at the raw text on purpose: the note goes to the service desk through {@link #escapedForNote}, so
+     * entities and tags in it are shown literally and cannot turn into the phrase. Look-alike letters from other
+     * alphabets are not mapped.
      */
     static boolean contains(String text, String phrase) {
-        String current = text;
-        for (int round = 0; round < ENTITY_ROUNDS && current.indexOf('&') >= 0; round++) {
-            current = decodeEntities(current);
-        }
-        for (String previous = null; !current.equals(previous); ) {
-            previous = current;
-            current = HTML_TAG.matcher(current).replaceAll("");
-        }
-        return reduced(current).contains(reduced(phrase));
+        return reduced(text).contains(reduced(phrase));
+    }
+
+    /**
+     * The model's note as text that a service desk showing HTML displays literally: {@code &}, {@code <} and
+     * {@code >} become entities, and so do their compatibility forms (full-width, small), which a downstream NFKC
+     * would turn back into the ASCII characters. No decoder on our side has to guess what the other system's
+     * parser makes of the text.
+     */
+    static String escapedForNote(String text) {
+        StringBuilder out = new StringBuilder(text.length() + 16);
+        text.codePoints().forEach(codePoint -> {
+            String character = new String(Character.toChars(codePoint));
+            String compatible = codePoint < 128 ? character : Normalizer.normalize(character, Normalizer.Form.NFKC);
+            switch (compatible) {
+                case "&" -> out.append("&amp;");
+                case "<" -> out.append("&lt;");
+                case ">" -> out.append("&gt;");
+                default -> out.append(character);
+            }
+        });
+        return out.toString();
     }
 
     private static String reduced(String text) {

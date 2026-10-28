@@ -21,7 +21,7 @@ class AddNoteToolTest extends ServerTestSupport {
     void addsAnInternalNoteAfterReadingTheTicket() {
         try (McpSyncClient client = serviceAccountClient()) {
             McpSchema.CallToolResult result = call(client, "add_note",
-                    Map.of("ticketId", "IT-1", "body", "Replaced the toner.\n\"Done\" & closed"));
+                    Map.of("ticketId", "IT-1", "body", "Replaced the toner.\n\"Done\" & closed, a < b > c"));
 
             assertThat(result.isError()).isFalse();
             assertThat(text(result)).contains("\"ticketId\":\"IT-1\"", "\"noteId\":\"N-1\"");
@@ -29,7 +29,7 @@ class AddNoteToolTest extends ServerTestSupport {
             assertThat(BACKEND.authorizations()).containsExactly(SERVICE_KEY, SERVICE_KEY);
             assertThat(BACKEND.noteBodies()).containsExactly(
                     "IT-1 {\"visibility\":\"internal\",\"body\":\"[Added through the MCP platform on behalf of jkowalski]"
-                            + "\\nReplaced the toner.\\n\\\"Done\\\" & closed\"}");
+                            + "\\nReplaced the toner.\\n\\\"Done\\\" &amp; closed, a &lt; b &gt; c\"}");
         }
     }
 
@@ -108,6 +108,18 @@ class AddNoteToolTest extends ServerTestSupport {
             assertThat(text(result)).contains("attribution line");
         }
         assertThat(BACKEND.noteBodies()).isEmpty();
+    }
+
+    @Test
+    void markupInANoteReachesTheServiceDeskEscapedSoItIsShownLiterally() {
+        try (McpSyncClient client = serviceAccountClient()) {
+            assertThat(call(client, "add_note", Map.of("ticketId", "IT-1",
+                    "body", "<b>x</b> &#91;Added&#93; &amp; \uFF1Cscript\uFF1E")).isError()).isFalse();
+        }
+
+        assertThat(BACKEND.noteBodies()).singleElement().satisfies(note -> assertThat(note)
+                .contains("&lt;b&gt;x&lt;/b&gt; &amp;#91;Added&amp;#93; &amp;amp; &lt;script&gt;")
+                .doesNotContain("<b>", "<script"));
     }
 
     @Test
