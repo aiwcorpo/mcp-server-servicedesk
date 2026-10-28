@@ -85,10 +85,13 @@ final class PlainText {
     }
 
     /**
-     * The model's note as text that a service desk showing HTML displays literally: {@code &}, {@code <} and
-     * {@code >} become entities, and so do their compatibility forms (full-width, small), which a downstream NFKC
-     * would turn back into the ASCII characters. No decoder on our side has to guess what the other system's
-     * parser makes of the text.
+     * The model's note as text that a service desk displays literally, whether it renders HTML, Markdown or both.
+     * {@code &}, {@code <} and {@code >} become entities, and so do their compatibility forms (full-width, small),
+     * which a downstream NFKC would turn back into the ASCII characters. The syntax a Markdown renderer makes a
+     * link, image, reference definition, code span or emphasis of ({@code \ [ ] ( ) ! ` * _}) gets a backslash,
+     * so {@code [x](y)} arrives as {@code \[x\]\(y\)} and no definition line starts with an unescaped
+     * bracket. Nothing that reaches the system can then be reinterpreted into the attribution phrase, and no
+     * decoder or parser of ours has to guess what the other system makes of the text.
      */
     static String escapedForNote(String text) {
         StringBuilder out = new StringBuilder(text.length() + 16);
@@ -99,6 +102,7 @@ final class PlainText {
                 case "&" -> out.append("&amp;");
                 case "<" -> out.append("&lt;");
                 case ">" -> out.append("&gt;");
+                case "\\", "[", "]", "(", ")", "!", "`", "*", "_" -> out.append('\\').append(character);
                 default -> out.append(character);
             }
         });

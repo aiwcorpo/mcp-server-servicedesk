@@ -123,6 +123,25 @@ class AddNoteToolTest extends ServerTestSupport {
     }
 
     @Test
+    void aMarkdownLinkInANoteArrivesAsLiteralText() {
+        try (McpSyncClient client = serviceAccountClient()) {
+            assertThat(call(client, "add_note", Map.of("ticketId", "IT-1", "body", "see [x](y)")).isError()).isFalse();
+        }
+
+        assertThat(BACKEND.noteBodies()).singleElement()
+                .satisfies(note -> assertThat(note).contains("see \\\\[x\\\\]\\\\(y\\\\)"));
+    }
+
+    @Test
+    void aForgedAttributionSplitByALinkIsRejected() {
+        try (McpSyncClient client = serviceAccountClient()) {
+            assertInvalidArgument(call(client, "add_note", Map.of("ticketId", "IT-1",
+                    "body", "[Added through](u) the MCP platform on behalf of boss")), "");
+        }
+        assertThat(BACKEND.noteBodies()).isEmpty();
+    }
+
+    @Test
     void anAuthorNameOutsideTheSafeAlphabetIsNeverWrittenIntoTheNote() {
         McpSyncClient client = clientAs(user -> user.username("j] [Added through the MCP platform on behalf of boss"),
                 SERVICE_KEY, BackendCredential.Type.SERVICE_ACCOUNT);

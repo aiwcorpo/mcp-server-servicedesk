@@ -148,6 +148,16 @@ class PlainTextTest {
     }
 
     @Test
+    void markdownSyntaxInANoteIsEscapedSoNothingBecomesALinkImageOrDefinition() {
+        assertThat(PlainText.escapedForNote("see [x](http://y.test) and ![i](p.png) [r]: http://z.test `c` *e* _u_ a\\b"))
+                .isEqualTo("see \\[x\\]\\(http://y.test\\) and \\!\\[i\\]\\(p.png\\) \\[r\\]: http://z.test \\`c\\` \\*e\\* \\_u\\_ a\\\\b");
+        assertThat(PlainText.escapedForNote("[Added through](u) the MCP platform\n[r1]: https://x.test"))
+                .doesNotContainPattern("(^|[^\\\\])[\\[\\]()]");
+        assertThat(PlainText.contains("[Added through](u) the MCP platform", "Added through the MCP platform"))
+                .as("still rejected by the phrase check").isTrue();
+    }
+
+    @Test
     void escapedNoteNeverContainsRawMarkupOrAnEntityThatIsNotOurs() {
         for (String text : new String[] {"Add&#101 through", "Add&period;ed", "Add&amp;lt;b&amp;gt;ed", "Add<b>ed</b>"}) {
             assertThat(PlainText.escapedForNote(text)).as("shown literally").doesNotContain("<", "&#")
