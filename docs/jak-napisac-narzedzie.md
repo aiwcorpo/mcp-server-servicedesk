@@ -32,7 +32,7 @@ do modelu, który może go potraktować jak instrukcję. Wzorcem jest `get_ticke
   narzędzie potrzebuje filtrów, to są osobne, ograniczone pola (status, typ, przypisany) parsowane i
   składane przez serwer z escapowaniem.
 - Walidacja przed systemem. Wzorzec i długość identyfikatora, limity wielkości (`size <= 100`),
-  zamknięte listy wartości. Schemat z `ServicedeskToolSchemas` (zamknięty: `additionalProperties: false`)
+  zamknięte listy wartości. Schemat z `@ArgumentLimits` (zamknięty: `additionalProperties: false`)
   egzekwuje starter i odpowiada C10 `invalid_argument` ze zdarzeniem C8, bez wartości i bez nazw spoza schematu.
   Walidacja w kodzie (`InvalidToolArgumentException` ze stałym tekstem) zostaje jako druga linia; nigdy z
   wartością argumentu ani z treścią odpowiedzi systemu.

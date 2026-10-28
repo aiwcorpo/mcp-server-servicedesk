@@ -167,6 +167,8 @@ final class StubBackend {
             }
             case "IT-HUGE" -> respond(exchange, 200,
                     "{\"id\":\"IT-HUGE\",\"queue\":\"IT\",\"description\":\"" + "x".repeat(HUGE_BYTES) + "\"}");
+            case "IT-EMPTY" -> respond(exchange, 200, "{\"id\":\"IT-EMPTY\",\"queue\":\"IT\",\"subject\":null,"
+                    + "\"status\":null,\"description\":\"<p></p>\"}");
             case "NOQ-1" -> respond(exchange, 200, "{\"id\":\"NOQ-1\",\"subject\":\"No queue\",\"status\":\"open\"}");
             default -> {
                 StubTicket ticket = tickets.get(id);

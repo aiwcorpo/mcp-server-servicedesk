@@ -160,4 +160,16 @@ class GetTicketToolTest extends ServerTestSupport {
                 .as("the rejected call is audited (C8) as invalid_argument").anySatisfy(line -> assertThat(line)
                         .contains("\"tool\":\"get_ticket\"", "invalid_argument").doesNotContain("FORGED"));
     }
+
+    @Test
+    void aTicketWithEmptyOptionalFieldsIsReturnedWithNulls() {
+        try (McpSyncClient client = serviceAccountClient()) {
+            McpSchema.CallToolResult result = call(client, "get_ticket", Map.of("ticketId", "IT-EMPTY"));
+
+            assertThat(result.isError()).isFalse();
+            assertThat(text(result)).contains("\"id\":\"IT-EMPTY\"", "\"subject\":null", "\"status\":null",
+                    "\"description\":null");
+            assertThat(result.structuredContent()).isNotNull();
+        }
+    }
 }

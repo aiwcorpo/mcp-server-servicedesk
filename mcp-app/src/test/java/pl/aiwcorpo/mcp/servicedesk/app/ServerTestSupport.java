@@ -73,8 +73,13 @@ abstract class ServerTestSupport {
      * {@code X-MCP-Credential} labelled {@code type}.
      */
     McpSyncClient clientWithCredential(String credential, BackendCredential.Type type) {
-        McpSyncHttpClientRequestCustomizer gateway =
-                GATEWAY.asGateway(user -> user.username(CALLER), credential, type);
+        return clientAs(user -> user.username(CALLER), credential, type);
+    }
+
+    /** Same, with the JWT claims of the caller set by {@code user} (a call through a link carries {@code vs}). */
+    McpSyncClient clientAs(java.util.function.Consumer<TestGateway.Token> user, String credential,
+            BackendCredential.Type type) {
+        McpSyncHttpClientRequestCustomizer gateway = GATEWAY.asGateway(user, credential, type);
         HttpClientStreamableHttpTransport transport = HttpClientStreamableHttpTransport.builder(baseUrl())
                 .endpoint(ENDPOINT)
                 .openConnectionOnStartup(false)

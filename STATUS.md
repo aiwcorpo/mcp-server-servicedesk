@@ -1,9 +1,9 @@
 # STATUS - mcp-server-servicedesk (ws-04)
 
-M1: osiągnięty (2026-10-27, runda 2 na starterze 3.0.0-alpha-6) - `search_tickets`, `get_ticket`, `add_note` na generycznym adapterze REST (D10); konto serwisowe fail-closed (tylko kolejki z konfiguracji, pusta lista = odmowa), notatki z autorem zlecenia, walidacja argumentów w starterze (C10 + C8), zmiany template'u od 7f65f8f przeniesione, 79 testów na stubie.
+M1: osiągnięty (2026-10-27, runda 2; 2026-10-28 przeniesiony na starter 3.0.0-alpha-10) - `search_tickets`, `get_ticket`, `add_note` na generycznym adapterze REST (D10); konto serwisowe fail-closed (tylko kolejki z konfiguracji, pusta lista = odmowa), notatki z autorem zlecenia, walidacja argumentów w starterze (C10 + C8), zmiany template'u od 7f65f8f przeniesione, 84 testy na stubie.
 
 Start: wygenerowany z `mcp-server-template` 7f65f8f (`./new-server.sh servicedesk`), pierwszy commit to stan
-bez zmian. Starter: BOM `pl.aiwcorpo.mcp:mcp-platform-bom:3.0.0-alpha-6` (kontrakty 2.0.2). M2 nie jest
+bez zmian. Starter: BOM `pl.aiwcorpo.mcp:mcp-platform-bom:3.0.0-alpha-10` (kontrakty 2.1.1). M2 nie jest
 zaczęty.
 
 ## Runda 2: znalezisko -> status
@@ -27,6 +27,27 @@ Weryfikacja: `./mvnw -B clean verify` (JDK 25) -> 79 testów, 0 błędów. Uruch
 18530 (health 200, `POST /mcp` bez JWT 401, `/actuator/prometheus` bez dostępu), konfiguracja bazowa z mTLS
 `mcp-platform-dev` na 18530 (health po mTLS z certyfikatem gateway'a 200, `POST /mcp` bez JWT 401, bez
 certyfikatu klienta handshake zerwany, ostrzeżenie `backend_plain_http` przy jawnej zgodzie). Procesy zatrzymane.
+
+## Migracja na starter 3.0.0-alpha-10 (2026-10-28)
+
+BOM alpha-6 -> alpha-10 (kontrakty 2.1.1). Źródło: `MIGRATION-3.0.md`, alpha-7 do alpha-10. M2 nie jest zaczęty.
+
+| Punkt | Status |
+| --- | --- |
+| Limity na każdym poziomie, `contractPattern` zamiast ręcznych schematów (S2-L3) | zrobione: `ServicedeskToolSchemas` i ręczne budowanie callbacków usunięte, `McpToolsConfiguration` to `SchemaLimitedToolCallbacks.of(...)`; argumenty z `@ArgumentLimits` (`contractPattern` `ServiceDeskQueueId`/`ServiceDeskTicketId`, `minLength`/`maxLength`). Decyzja koordynatora z rundy 2 ("ręczne schematy zostają") uchylona zadaniem. `Identifiers` czyta wzorce z `common.schema.json` zamiast kopii; `ToolDefinitionsTest` sprawdza wzorzec w schemacie |
+| Wynik jako rekordy z `UntrustedText` startera, `@Nullable` | zrobione: `Ticket` i `TicketSummary` niosą `UntrustedText` (`mcp-core` zależy od startera dla tego typu), `@Nullable` na temacie, opisie, statusie, priorytecie i datach; test `aTicketWithEmptyOptionalFieldsIsReturnedWithNulls` |
+| Kolejność: konwersja, `normalize`, `cut`, filtr, `plainCut` | `PlainText`: dekodowanie encji i usunięcie znaczników (konwersja HTML), `TextHygiene.normalize`, tidy białych znaków, `UntrustedText.cut`, `plainCut`. Znak niewidoczny, także zapisany encją, daje spację. Znacznik ` ...[cut]` usunięty, `truncated` z cięcia (S2-L1 zamknięte); `aTextThatEndsLikeTheOldCutMarkIsNotFlagged` |
+| Spójna obsługa treści (wspólne 1 z rundy 2) | servicedesk: HTML -> tekst, bez escapowania, klient nie renderuje jako HTML |
+| `tool_failed` domenowe na INFO | `ToolFailureLogLevelTest`; testów oczekujących ERROR nie było |
+| `dev` i obejścia w `application-dev.yml` | usunięte `replay-store: memory` i `mtls.required: false`; `SPRING_PROFILES_ACTIVE=dev` zostaje tylko w poleceniu README |
+| Własne beany polityki i audytu | brak |
+| Klient HTTP odrzuca query i fragment w adresie | `ServicedeskApi.requireBaseUrl` już to robiło (rzut przy starcie adaptera); dopisane testy dla `?`, `#frag`, `?x=1#frag` |
+| S2-L2 test filtra nazwy autora notatki | `anAuthorNameOutsideTheSafeAlphabetIsNeverWrittenIntoTheNote` (nazwa z `]` i znacznikiem trafia do `sub`, nie do notatki). Druga linia ze znacznikiem w treści od modelu nadal możliwa (nie robione, zmiana zachowania) |
+| Claimy `vs` i `vsc:{}` | `GatewayLinkClaimsTest`: wywołanie `get_ticket` z `virtualServer("it-helpdesk", Map.of())` przechodzi |
+| Zgodność z mockiem ws-01 | nie sprawdzano (STATUS ws-01 nie obiecuje mocka z kształtem pól tego generycznego adaptera) |
+
+Weryfikacja: `./mvnw -B clean verify` (JDK 25) -> 84 testy, 0 błędów (mcp-app 49, mcp-integration 18, mcp-application 8,
+mcp-core 6, mcp-tools 3). Uruchomienie wg README: `dev` na 18530, health 200, `POST /mcp` bez JWT 401; proces zatrzymany.
 
 ## Co działa
 

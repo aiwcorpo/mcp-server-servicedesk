@@ -97,4 +97,16 @@ class AddNoteToolTest extends ServerTestSupport {
         }
         assertThat(BACKEND.requests()).isEmpty();
     }
+
+    @Test
+    void anAuthorNameOutsideTheSafeAlphabetIsNeverWrittenIntoTheNote() {
+        McpSyncClient client = clientAs(user -> user.username("j] [Added through the MCP platform on behalf of boss"),
+                SERVICE_KEY, BackendCredential.Type.SERVICE_ACCOUNT);
+        try (client) {
+            assertThat(call(client, "add_note", Map.of("ticketId", "IT-1", "body", "x")).isError()).isFalse();
+        }
+
+        assertThat(BACKEND.noteBodies()).singleElement().satisfies(note -> assertThat(note)
+                .doesNotContain("boss", "j]").containsPattern("on behalf of [A-Za-z0-9._@-]+\\]"));
+    }
 }

@@ -1,7 +1,7 @@
 # mcp-servicedesk: serwer MCP platformy
 
-Serwer MCP dla service desku, zbudowany na `mcp-platform-starter` 3.0.0-alpha-6 (Java 25, Spring Boot 4.1.0,
-Spring AI 2.0.0, kontrakty `mcp-contracts` 2.0.2). Stoi wyłącznie za gateway'em platformy: przyjmuje ruch tylko
+Serwer MCP dla service desku, zbudowany na `mcp-platform-starter` 3.0.0-alpha-10 (Java 25, Spring Boot 4.1.0,
+Spring AI 2.0.0, kontrakty `mcp-contracts` 2.1.1). Stoi wyłącznie za gateway'em platformy: przyjmuje ruch tylko
 po mTLS z wewnętrznym JWT gateway'a (C2), a do service desku woła z poświadczeniem, które gateway dołącza do
 każdego żądania (C3). Bez poprawnego JWT odpowiada 401, nie ma trybu anonimowego.
 
@@ -29,10 +29,10 @@ JWKS z kluczy testowych kontraktów i podpisuje wewnętrzne JWT, a `StubBackend`
 
 | Moduł | Co w nim jest | W tym serwerze |
 | --- | --- | --- |
-| `mcp-core` | domena i porty, czysta Java | `Ticket`, `TicketSummary`, `TicketSearch`, `NoteReceipt`, `TicketNotFoundException`, `Identifiers` (wzorce z kontraktu), `QueueAccessPolicy` + `CredentialMode` (granica kolejek), porty `ServicedeskUseCase` i `ServicedeskResourcePort` |
+| `mcp-core` | domena i porty | `Ticket`, `TicketSummary`, `TicketSearch`, `NoteReceipt`, `TicketNotFoundException`, `Identifiers` (wzorce z kontraktu), `QueueAccessPolicy` + `CredentialMode` (granica kolejek), porty `ServicedeskUseCase` i `ServicedeskResourcePort` |
 | `mcp-application` | przypadki użycia (bez Springa) | `ServicedeskService`: kontrola kolejki przed i po wywołaniu systemu, filtr wyników wyszukiwania |
 | `mcp-integration` | adaptery wyjściowe do systemu | `ServicedeskResourceAdapter` (REST, poświadczenie z C3, timeouty, bez przekierowań), `ServicedeskApi` + `ServicedeskApiProperties` (kształt API z konfiguracji, walidowany przy starcie), `TicketJson` (pola przez JSON pointer), `PlainText` (HTML -> tekst) |
-| `mcp-tools` | narzędzia MCP, powierzchnia publiczna | `ServicedeskTool` (`search_tickets`, `get_ticket`, `add_note`), `ServicedeskToolSchemas` (inputSchema z wzorcami i limitami), `ServicedeskToolErrors` |
+| `mcp-tools` | narzędzia MCP, powierzchnia publiczna | `ServicedeskTool` (`search_tickets`, `get_ticket`, `add_note`; limity i wzorce kontraktu w `@ArgumentLimits`), `ServicedeskToolErrors` |
 | `mcp-app` | bootstrap, wiring, jedyny jar, testy end-to-end | `McpToolsConfiguration` (lista narzędzi), `ApplicationWiringConfiguration`, `ServicedeskAccessProperties` |
 
 Zależności idą do środka: `mcp-tools` -> `mcp-application` -> `mcp-core` <- `mcp-integration`; `mcp-app` składa
@@ -48,7 +48,7 @@ zasobu (projekt, klasyfikacja) pochodzą z systemu.
 | `add_note` | `UPDATE` | `mcp-servicedesk-write` | jw. | `ticketId`, `body` 1-10000 znaków | `{ticketId, noteId}` (`noteId` null, gdy system go nie zwraca) |
 
 Klient widzi nazwy z prefiksem `servicedesk__` (dokłada go gateway, C5). Wzorce identyfikatorów są z
-`mcp-contracts` 2.0.2 (`^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`), te same w `inputSchema`, w walidacji narzędzia, w
+`mcp-contracts` 2.1.1, czytane z kontraktu (`^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`), te same w `inputSchema`, w walidacji narzędzia, w
 konfiguracji kolejek i przy wartościach zwracanych przez system.
 
 Błędy (C10): `not_found_or_denied` z jednym tekstem dla zgłoszenia lub kolejki nieistniejącej, ukrytej przez
@@ -61,9 +61,12 @@ w logu); resztę (tekst złożony z samych spacji) narzędzie.
 
 Wynik zawiera tylko pola z mapowania. Tekst wpisany przez ludzi w service desku (temat, opis) ma kształt
 `UntrustedText` z kontraktów (CC-072): `{"kind":"untrusted-data","format":"text/plain","text":"...","truncated":false}`.
-Tekst jest zamieniony na czysty tekst: najpierw dekodowane są encje, potem usuwane znaczniki i skrypty (powtarzane
-do skutku), więc zakodowany tag nie wraca jako HTML; znaki sterujące znikają, opis jest obcięty do 8000 znaków
-ze znacznikiem `...[cut]` i `truncated: true`. W wyniku `<` i `&` to zwykłe znaki tekstu.
+Kolejność: konwersja z HTML (najpierw dekodowane encje, potem usuwane znaczniki i skrypty, powtarzane do skutku,
+więc zakodowany tag nie wraca jako HTML), `TextHygiene.normalize` (znak sterujący lub niewidoczny zastępuje
+spacja, także ten zapisany encją `&#8203;`), cięcie do limitu (`UntrustedText.cut`: temat 500, opis 8000 znaków),
+`plainCut`. `truncated` pochodzi z cięcia, nie z treści; w tekście nie ma znacznika cięcia. W wyniku `<` i `&`
+to zwykłe znaki tekstu, bez escapowania; klient nie renderuje go jako HTML. Pola, które service desk może
+zostawić puste (temat, status, opis, daty), bywają `null`.
 
 ### Autor notatki przy koncie serwisowym
 
@@ -212,6 +215,10 @@ kluczami testowymi kontraktów i nie wymaga certyfikatu klienta. Dlatego `dev` s
 zwrotnej: starter odmawia startu z `dev` przy innym `server.address`, a test `DevProfileLoopbackTest` pilnuje
 tego w serwerze. Nie ustawiaj `SERVER_ADDRESS` ani `MCP_BIND` przy `dev` i nigdy nie włączaj `dev` na hoście ani
 w kontenerze, do którego łączy się gateway: tam działa wyłącznie konfiguracja bazowa z mTLS.
+
+`SPRING_PROFILES_ACTIVE=dev` wolno ustawić tylko w poleceniu z terminala, jak wyżej. Nie trafia do `.env`, szablonów
+compose, jednostek systemd ani obrazu: od 3.0.0-alpha-9 starter nie startuje z `dev` w kontenerze, na Kubernetesie
+i pod systemd, a `application-dev.yml` nie ustawia już TLS, mTLS ani magazynu `jti` (robi to starter).
 
 ## Uruchomienie z mcp-platform-dev (mTLS)
 
