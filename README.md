@@ -286,7 +286,7 @@ hosta (`mcp-gateway/scripts/run-dev-host.sh`, JWKS na `localhost:18445`) skonfig
 
 ## Testy
 
-`./mvnw verify` (JDK 25, bez Dockera): 122 testów.
+`./mvnw verify` (JDK 25, bez Dockera): 123 testów.
 
 | Klasa | Co sprawdza |
 | --- | --- |
