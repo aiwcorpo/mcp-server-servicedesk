@@ -4,7 +4,7 @@ M1: osiągnięty (2026-10-27, runda 2; 2026-10-28 przeniesiony na starter 3.0.0-
 
 M3: osiągnięty (2026-10-28) - starter 3.0.0-beta-4 (kontrakty 3.1.0): `@ToolTitle`, `@ResourceRef` + `ResourceResolver` dla `ServiceDesk::Queue` i `ServiceDesk::Ticket` (klasyfikacja kolejki z systemu, brak klasyfikacji = nie tajne), wyszukiwanie ograniczone linkiem i grantami konta serwisowego (`QueryScope`), `ResultFilter` po `@ResourceRef` w trafieniu, paczka polityk i manifest (`GET /mcp-manifest` przechodzi reguły), atrybucja notatki z escapowaniem HTML/Markdown i trzema formami frazy bez zmian, 123 testów.
 
-M4: osiągnięty (2026-10-29) - starter 3.0.0-beta-9 (kontrakty 4.1.0), `accepted-credential-types: [service-account]` na stałe, tryb `serverConfiguredQueues` i `MCP_SERVICEDESK_ALLOWED_QUEUES` usunięte (CC-163), kolejki wyłącznie z grantów paczki i linku, manifest jako artefakt budowy (`mcp-app/target/mcp-manifest.json`), 115 testów (stan sprzed poprawek po przeglądzie).
+M4: osiągnięty (2026-10-29) - starter 3.0.0-beta-9 (kontrakty 4.1.0), `accepted-credential-types: [service-account]` na stałe, tryb `serverConfiguredQueues` i `MCP_SERVICEDESK_ALLOWED_QUEUES` usunięte (CC-163), kolejki wyłącznie z grantów paczki i linku, manifest jako artefakt budowy (`mcp-app/target/mcp-manifest.json`), 118 testów.
 
 Start: wygenerowany z `mcp-server-template` 7f65f8f (`./new-server.sh servicedesk`), pierwszy commit to stan
 bez zmian. Starter: BOM `pl.aiwcorpo.mcp:mcp-platform-bom:3.0.0-alpha-11` (kontrakty 2.1.1). M2 nie jest
