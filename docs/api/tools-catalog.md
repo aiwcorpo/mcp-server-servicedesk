@@ -6,11 +6,11 @@ tą tabelą.
 
 | Narzędzie (klient widzi `servicedesk__<nazwa>`) | Tytuł | Ryzyko | Akcja (C6) | Argumenty | Uprawnienie (C9) | Poświadczenie |
 | --- | --- | --- | --- | --- | --- | --- |
-| `search_tickets` | Szukaj zgłoszeń w kolejce | `READ_ONLY` | `read` | `queue` (obowiązkowa, `ServiceDeskQueueId`), `text` (1-200) | `mcp-servicedesk-read` | `service-account` albo `user-secret` z C3 |
+| `search_tickets` | Szukaj zgłoszeń w kolejce | `READ_ONLY` | `read` | `queue` (obowiązkowa, `ServiceDeskQueueId`), `text` (1-200) | `mcp-servicedesk-read` | `service-account` (C3) |
 | `get_ticket` | Pobierz zgłoszenie | `READ_ONLY` | `read` | `ticketId` (`ServiceDeskTicketId`) | `mcp-servicedesk-read` | jw. |
 | `add_note` | Dodaj notatkę do zgłoszenia | `UPDATE` | `update` | `ticketId` (`ServiceDeskTicketId`), `body` (1-10000) | `mcp-servicedesk-write` | jw. |
 
-Wzorce z `mcp-contracts` 3.1.0 (czytane z kontraktu, nie kopiowane): `ServiceDeskQueueId` i `ServiceDeskTicketId` = `^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`.
+Wzorce z `mcp-contracts` 4.1.0 (czytane z kontraktu, nie kopiowane): `ServiceDeskQueueId` i `ServiceDeskTicketId` = `^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`.
 Zasoby C7 (`@ResourceRef`): `queue` -> `ServiceDesk::Queue{id}`, `ticketId` -> `ServiceDesk::Ticket`
 (rodzic: kolejka, którą zwraca system; atrybut `classification` kolejki jest opcjonalny). Opisy narzędzi (dokładny tekst, wchodzi do `definitionHash`) są w
 `ServicedeskTool`, limity wejścia w `@ArgumentLimits` (wzorce przez `contractPattern`).

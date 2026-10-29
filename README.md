@@ -1,15 +1,17 @@
 # mcp-servicedesk: serwer MCP platformy
 
-Serwer MCP dla service desku, zbudowany na `mcp-platform-starter` 3.0.0-beta-4 (Java 25, Spring Boot 4.1.0,
-Spring AI 2.0.0, kontrakty `mcp-contracts` 3.1.0). Stoi wyłącznie za gateway'em platformy: przyjmuje ruch tylko
+Serwer MCP dla service desku, zbudowany na `mcp-platform-starter` 3.0.0-beta-7 (Java 25, Spring Boot 4.1.0,
+Spring AI 2.0.0, kontrakty `mcp-contracts` 4.1.0). Stoi wyłącznie za gateway'em platformy: przyjmuje ruch tylko
 po mTLS z wewnętrznym JWT gateway'a (C2), a do service desku woła z poświadczeniem, które gateway dołącza do
 każdego żądania (C3). Bez poprawnego JWT odpowiada 401, nie ma trybu anonimowego.
 
 Produkt service desku nie jest jeszcze wybrany (D10), więc adapter jest generycznym klientem REST: ścieżki,
 parametry, treść notatki i położenie pól w JSON pochodzą z konfiguracji (`servicedesk.api`, sekcja "Adapter
-REST"). Poświadczenie to `service-account` (domyślnie, klucz API konta platformy) albo `user-secret` (token
-użytkownika). Przy koncie serwisowym service desk nie zna użytkownika i to serwer jest główną granicą dostępu:
-obsługuje tylko kolejki jawnie wpisane w konfiguracji, a bez tej listy odmawia wszystkiego.
+REST"). Jedyne przyjmowane poświadczenie to `service-account` (klucz konta serwisowego, który broker wydaje gateway'owi;
+`accepted-credential-types: [service-account]`, bez konfiguracji). Service desk nie zna użytkownika, więc dostęp do
+kolejek wynika wyłącznie z paczki polityk: grupy `mcp-servicedesk-queue-<id>` przyznają kolejkę, link wirtualnego
+serwera zawęża ją, a konfiguracja serwera żadnej kolejki nie otwiera (CC-163). Wywołanie z innym typem poświadczenia
+kończy się `internal_error` przed polityką i systemem.
 
 Logowania użytkowników, decyzji o dostępie do narzędzi i potwierdzeń akcji serwer nie robi: to zadania
 gateway'a. Serwer odpowiada za narzędzia, adapter, granicę kolejek, poprawne błędy (C10) i audyt (C8), który
@@ -43,7 +45,7 @@ pochodzą z systemu.
 
 | Narzędzie | Tytuł | Ryzyko | Akcja Cedar | Uprawnienie (C9) | Poświadczenie | Argumenty | Wynik |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `search_tickets` | Szukaj zgłoszeń w kolejce | `READ_ONLY` | `read` | `mcp-servicedesk-read` | `service-account` albo `user-secret` (C3) | `queue` (obowiązkowa, wzorzec `ServiceDeskQueueId`, `@ResourceRef` `ServiceDesk::Queue`), `text` 1-200 znaków | `{queue, tickets[{id, queue, status, updated, subject}], truncated}`, najwyżej 20; `subject` to obiekt z oznaczeniem danych (niżej) |
+| `search_tickets` | Szukaj zgłoszeń w kolejce | `READ_ONLY` | `read` | `mcp-servicedesk-read` | `service-account` (C3) | `queue` (obowiązkowa, wzorzec `ServiceDeskQueueId`, `@ResourceRef` `ServiceDesk::Queue`), `text` 1-200 znaków | `{queue, tickets[{id, queue, status, updated, subject}], truncated}`, najwyżej 20; `subject` to obiekt z oznaczeniem danych (niżej) |
 | `get_ticket` | Pobierz zgłoszenie | `READ_ONLY` | `read` | `mcp-servicedesk-read` | jw. | `ticketId` (wzorzec `ServiceDeskTicketId`, `@ResourceRef` `ServiceDesk::Ticket`) | `{id, queue, status, priority, created, updated, subject, description}`; `subject` i `description` to obiekty z oznaczeniem danych (niżej) |
 | `add_note` | Dodaj notatkę do zgłoszenia | `UPDATE` | `update` | `mcp-servicedesk-write` | jw. | `ticketId` (`@ResourceRef` `ServiceDesk::Ticket`), `body` 1-10000 znaków | `{ticketId, noteId}` (`noteId` null, gdy system go nie zwraca) |
 
@@ -76,7 +78,7 @@ Przy poświadczeniu `service-account` autorem każdej notatki w service desku je
 service desku widział, kto ją zlecił, serwer dokleja na początku treści stałą linię
 `[Added through the MCP platform on behalf of <użytkownik>]`. Nazwa pochodzi z zaufanego tokenu gateway'a
 (`CallerContext`: `usr`, a gdy go brak `sub`), nie z argumentów narzędzia, i jest ograniczona do znaków
-`A-Za-z0-9._@-` (inaczej `unknown`). Przy `user-secret` autorem jest sam użytkownik i prefiksu nie ma. Limit
+`A-Za-z0-9._@-` (inaczej `unknown`). Limit
 10000 znaków dotyczy tekstu od modelu, prefiks dochodzi do niego. Treść od modelu wychodzi do systemu escapowana (`&`, `<`, `>` i ich formy zgodnościowe na encje, składnia Markdown `\ [ ] ( ) ! ` * _` z backslashem), więc system
 pokazuje tagi i encje doslownie; zakłada to, że notatka jest tam renderowana jako HTML. Treść, która sama zawiera
 frazę `Added through the MCP platform` (sprawdzane w surowym tekście, po pełnym dekodowaniu HTML5 z usunięciem tagów i po zredukowaniu linków Markdown, każdorazowo po usunięciu znaków niewidocznych, NFKC, interpunkcji, wielkości liter i odstępów), jest odrzucana jako `invalid_argument`,
@@ -84,27 +86,22 @@ frazę `Added through the MCP platform` (sprawdzane w surowym tekście, po pełn
 
 ## Granica kolejek
 
-`servicedesk.access` (zmienne `MCP_SERVICEDESK_CREDENTIAL_MODE`, `MCP_SERVICEDESK_ALLOWED_QUEUES`):
-
-| Tryb | Lista kolejek | Zachowanie |
-| --- | --- | --- |
-| `service-account` (domyślny) | pusta | każde narzędzie: `not_found_or_denied`, system nie jest wołany; ostrzeżenie `event=no_allowed_queues` przy starcie |
-| `service-account` | `IT,OPS` | tylko te kolejki (dokładne porównanie, wielkość liter ma znaczenie) |
-| `user-secret` | pusta | decyduje konto użytkownika w systemie |
-| `user-secret` | niepusta | konto użytkownika, dodatkowo zawężone do listy |
-
-Poświadczenie oznaczone przez gateway jako `service-account` jest zawsze trzymane listą, także w trybie
-`user-secret` (pomyłka w konfiguracji nie otwiera dostępu). Kolejka jest oceniana na tym, co system zwraca w
-chwili wywołania, nie na tym, co podał model:
+Kolejki otwiera tylko paczka polityk (C7): grupy `mcp-servicedesk-queue-<id>` w `entities/static.json`. Serwer nie ma
+listy kolejek ani trybu poświadczenia w konfiguracji (zmienne `MCP_SERVICEDESK_ALLOWED_QUEUES`,
+`MCP_SERVICEDESK_CREDENTIAL_MODE` i `MCP_ACCEPTED_CREDENTIAL_TYPES` nie istnieją). Wywołujący bez grupy kolejki dostaje
+`not_found_or_denied` z `get_ticket`, `add_note` i `search_tickets`, a system nie jest wołany. Kolejka w argumencie
+spoza linku wirtualnego serwera to także `not_found_or_denied`, nie `access_denied` (CC-146 c; wymaga to paczki bez
+reguły `vs-narrow-call-servicedesk-queue` z przykładów kontraktów, zob. STATUS). Kolejka jest oceniana na tym, co
+system zwraca w chwili wywołania, nie na tym, co podał model:
 
 - `get_ticket`: resolver zgłoszenia pobiera je, sprawdza, że system zwrócił to samo `id` (inne `id`, np. alias albo
-  scalenie, = odmowa) i że jego bieżąca kolejka jest dozwolona (zgłoszenie bez kolejki = odmowa), potem pyta o
+  scalenie, = odmowa) (zgłoszenie bez kolejki = odmowa), potem pyta o
   kolejkę (klasyfikacja); narzędzie czyta ten wynik, bez drugiego wywołania;
-- `get_ticket` i `add_note` dla konta serwisowego: bieżąca kolejka zgłoszenia musi być przyznana grupami wywołującego i dozwolona przez link, inaczej `not_found_or_denied` bez treści i bez zapisu;
+- `get_ticket` i `add_note`: bieżąca kolejka zgłoszenia musi być przyznana grupami wywołującego i dozwolona przez link, inaczej `not_found_or_denied` bez treści i bez zapisu;
 - `add_note`: ten sam resolver przed metodą, potem tylko zapis; przy odmowie nie ma żadnego zapisu;
-- `search_tickets`: kolejka z argumentu jest rozwiązywana (istnienie, klasyfikacja, lista serwera) zanim pójdzie
-  zapytanie; dla konta serwisowego musi być też przyznana grupami wywołującego (`QueryScope.grantedIds()`, odpowiednik
-  `includeGrants`; brak przyznanej kolejki = `not_found_or_denied` jak dla nieistniejącej, bez zapytania; trafienia sprawdzane po bieżącej kolejce zgłoszenia), a link wirtualnego serwera zawęża ją dalej; z wyników zostają tylko
+- `search_tickets`: kolejka z argumentu jest rozwiązywana (istnienie, klasyfikacja) zanim pójdzie
+  zapytanie i musi być przyznana grupami wywołującego (`QueryScope.grantedIds()`) oraz dozwolona przez link; wywołujący bez żadnej przyznanej kolejki
+  (`nothingToQuery()`) dostaje pusty wynik bez wywołania systemu (zwykle wcześniej odmawia starter: `not_found_or_denied`); trafienia sprawdzane po bieżącej kolejce zgłoszenia; z wyników zostają tylko
   zgłoszenia, które system raportuje w tej kolejce (zgłoszenia przeniesione, a nadal w indeksie, i trafienia
   z innych kolejek odpadają).
 
@@ -123,8 +120,22 @@ Wyniki wyszukiwania sprawdza `ResultFilter` po `@ResourceRef` w polu `id` trafie
 teraz w kolejce poza linkiem albo `restricted`, znika; licznika z systemu nie ma. Koszt: jedno `GET` zgłoszenia na
 trafienie i jedno `GET` kolejki na kolejkę wyniku (generyczne REST nie ma pobrania zbiorczego).
 
-Paczka polityk (`MCP_POLICY_*`, `GET /mcp-manifest`) jest wymagana poza `dev`; `accepted-credential-types` domyślnie
-`service-account`.
+Paczka polityk (`MCP_POLICY_*`, `GET /mcp-manifest`) jest wymagana poza `dev`.
+
+### Manifest i rejestracja
+
+`accepted-credential-types` to na stałe `[service-account]` (typ domyślny, pierwszy na liście, trafia do
+`context.credentialType` w Cedar). Do rejestru idzie artefakt budowy, nie odpowiedź działającego serwera: właściwość
+`aiwcorpo.mcp.platform.manifest.output-file` (testy ustawiają `target/mcp-manifest.json`; `ManifestTest` sprawdza, że plik
+jest równy `GET /mcp-manifest`). Rejestruje go potok CI certyfikatem `mcp-registry-ci-mcp-servicedesk`; `add_note`
+(`UPDATE`) czeka w gateway'u na zatwierdzenie administratora. Manifest z `environment: dev` publikuje wyłącznie profil
+`devstack` (klucze `dev-` i ta wartość są odrzucane poza trybem dev).
+
+### Metryki
+
+Nadmiar zdarzeń `authentication` w audycie liczy `mcp_audit_authentication_suppressed_total` (tagi `component=server`,
+`reason`). Alert na jego wzrost jest po stronie panelu operacji; poprzednia nazwa
+`mcp_server_audit_authentication_suppressed_total` nie istnieje.
 
 ## Adapter REST
 
@@ -202,10 +213,8 @@ błędem, `/actuator/prometheus` nie jest wystawiony.
 | `MCP_SERVICEDESK_URL` | adres bazowy API service desku (bez query i fragmentu); poza `dev` tylko `https` | wymagane |
 | `MCP_SERVICEDESK_ALLOW_PLAIN_HTTP` | `true` dopuszcza `http` poza `dev`, wyłącznie dla mocków `mcp-platform-dev` (poświadczenie idzie wtedy otwartym tekstem; ostrzeżenie w logu) | `false` |
 | `MCP_SERVICEDESK_SSL_BUNDLE` | bundle SSL dla HTTPS systemu, np. `mcp-internal-ca`; puste = zaufanie JDK | puste |
-| `MCP_SERVICEDESK_CREDENTIAL_MODE` | `service-account` albo `user-secret` (sekcja "Granica kolejek") | `service-account` |
-| `MCP_SERVICEDESK_ALLOWED_QUEUES` | dozwolone kolejki, po przecinku; w trybie `service-account` bez nich wszystko jest odmawiane | puste |
 | `MCP_POLICY_URL`, `MCP_POLICY_KEY_ID`, `MCP_POLICY_PUBLIC_KEY_FILE`, `MCP_POLICY_STATE_DIR` | podpisana paczka polityk (to samo, co ocenia gateway): adres `latest.json`, id i klucz publiczny Ed25519 (SPKI PEM), katalog stanu instancji (ostatnia przyjęta rewizja); bez paczki w 30 s serwer nie wstaje | wymagane |
-| `MCP_INTERNAL_URL`, `MCP_ACCEPTED_CREDENTIAL_TYPES` | adres serwera i przyjmowane typy poświadczeń w manifeście (`GET /mcp-manifest`) | wymagane, `service-account` |
+| `MCP_INTERNAL_URL` | adres serwera w manifeście (`GET /mcp-manifest`); typy poświadczeń są stałe: `service-account` | wymagane |
 | `MCP_REDIS_HOST`, `MCP_REDIS_PORT`, `MCP_REDIS_USER`, `MCP_REDIS_PASSWORD` | Redis dla jednorazowego `jti` (użytkownik ACL `mcp-servicedesk`, klucze `jti:mcp-servicedesk:*`) | `localhost`, `6379`, `mcp-servicedesk`, puste |
 | `MCP_PORT`, `MCP_BIND` | port i adres nasłuchu | `8443`, `0.0.0.0` |
 
@@ -269,7 +278,6 @@ export MCP_TLS_KEYSTORE="$MCP_PLATFORM_DEV/certs/mcp-servicedesk/keystore.p12"
 export MCP_TLS_TRUSTSTORE="$MCP_PLATFORM_DEV/certs/ca/truststore.p12"
 export MCP_PORT=18530 MCP_BIND=127.0.0.1 MCP_REDIS_PORT=16379
 export MCP_SERVICEDESK_URL=http://localhost:18531 MCP_SERVICEDESK_ALLOW_PLAIN_HTTP=true   # bez mocka; poza dev https
-export MCP_SERVICEDESK_ALLOWED_QUEUES=IT
 export MCP_GATEWAY_JWKS_URI=https://localhost:18445/.well-known/jwks.json
 export MCP_CONNECT_URL='http://localhost:18090/connections?system={system}'
 "$JAVA_HOME/bin/java" -jar mcp-app/target/mcp-servicedesk.jar
@@ -286,27 +294,25 @@ hosta (`mcp-gateway/scripts/run-dev-host.sh`, JWKS na `localhost:18445`) skonfig
 
 ## Testy
 
-`./mvnw verify` (JDK 25, bez Dockera): 123 testów.
+`./mvnw verify` (JDK 25, bez Dockera): 115 testów.
 
 | Klasa | Co sprawdza |
 | --- | --- |
 | `SearchTicketsToolTest` | zapytanie budowane przez serwer (`GET /api/v1/queues/IT/tickets?q=...&limit=21`), tekst jako zakodowana wartość, wyniki tylko z kolejki, brak pól spoza mapowania (trafienie z innej, także dozwolonej kolejki odpada); `credential_required` (brak i 401); nieznana kolejka -> `not_found_or_denied`; złe argumenty nie docierają do systemu |
 | `GetTicketToolTest` | poświadczenie z C3 dociera do systemu; HTML i pola dodatkowe nie wychodzą; brak poświadczenia i 401; 404 = 403; złe `ticketId` (także pole nadmiarowe) nie docierają do systemu; poświadczenie i treść błędu systemu nie trafiają do wyniku ani logu; nieczytelna odpowiedź, przekierowanie, timeout i odpowiedź ponad limit; nazwa argumentu z fałszywą linią audytu daje `invalid_argument`, zdarzenie C8 i żadnej sfałszowanej linii w logu |
 | `AddNoteToolTest` | odczyt zgłoszenia, potem POST z notatką wewnętrzną i linią o zleceniodawcy; `UPDATE` bez `readOnlyHint`/`destructiveHint`; brak poświadczenia, 401 na odczycie i na zapisie; 404, 403 i 403 na zapisie dają ten sam błąd; złe argumenty |
-| `QueueBoundaryTest` | konto serwisowe: zgłoszenie z innej kolejki, alias, bez kolejki, 403 i nieistniejące dają bajtowo ten sam błąd w `get_ticket` i `add_note`, bez żadnego zapisu; zgłoszenie przeniesione z dozwolonej kolejki przestaje być dostępne (także w wyszukiwaniu z nieaktualnym indeksem), przeniesione do dozwolonej jest dostępne; wyszukiwanie w niedozwolonej kolejce (także `it` zamiast `IT`) nie dociera do systemu; poświadczenie użytkownika nie poszerza trybu `service-account` |
+| `QueueBoundaryTest` | konto serwisowe: zgłoszenie z innej kolejki, alias, bez kolejki, 403 i nieistniejące dają bajtowo ten sam błąd w `get_ticket` i `add_note`, bez żadnego zapisu; zgłoszenie przeniesione z dozwolonej kolejki przestaje być dostępne (także w wyszukiwaniu z nieaktualnym indeksem), przeniesione do dozwolonej jest dostępne; wyszukiwanie w niedozwolonej kolejce (także `it` zamiast `IT`) nie dociera do systemu; poświadczenie użytkownika jest odrzucane (`internal_error`) przed narzędziem, system nie jest wołany |
 | `ResourcePolicyTest` | zgłoszenie w kolejce `restricted`, przeniesione do niej i z kolejki spoza zakresu konta serwisowego = `not_found_or_denied` bajtowo jak nieistniejące (też `add_note`, bez zapisu); `access_denied` bez grupy; link zawęża zgłoszenia i wyniki (`STALE-1`); wyszukiwanie konta serwisowego tylko w kolejkach przyznanych grupami; kolejka bez klasyfikacji nie jest zastrzeżona; awaria systemu to nie odmowa |
 | `ManifestTest` | `GET /mcp-manifest` przechodzi reguły `mcp-manifest`, definicje równe `tools/list` (`definitionHash`), ryzyko, `resourceRefs`, polskie tytuły, 401 bez JWT serwisowego |
-| `NoAllowedQueuesTest` | tryb `service-account` bez listy: każde narzędzie `not_found_or_denied`, zero wywołań systemu |
-| `UserSecretModeTest` | tryb `user-secret`: token użytkownika sięga każdej kolejki, którą pokazuje system; poświadczenie oznaczone `service-account` bez listy jest odrzucane |
 | `ProductionConfigurationTest` | konfiguracja bazowa: `client-auth: need`, paczka polityk i `state-dir` wymagane, bez kluczy testowych; backend `http` poza `dev` odrzucony (chyba że jawnie dopuszczony); `dev` na 127.0.0.1 |
 | `DevProfileLoopbackTest` | `dev` z adresem innym niż pętla zwrotna nie wstaje |
 | `ToolDefinitionsTest` | dokładnie trzy narzędzia z ryzykiem; `inputSchema` zamknięte (`additionalProperties: false`), wzorce z kontraktu, limity długości; opisy bez instrukcji |
 | `GatewayOnlyAccessTest` | bez JWT 401 (`tools/call`, `ping`, `initialize`), JWT innego serwera, innego narzędzia, wariant serwisowy i przeterminowany -> 401; bez JWT tylko health |
-| `ServicedeskServiceTest`, `QueueAccessPolicyTest` | granica kolejek bez Springa |
+| `ServicedeskServiceTest` | use case bez Springa: alias, kolejka z trafienia, limit, notatka po ponownym odczycie |
 | `ServicedeskToolTest` | walidacja tekstu w narzędziu bez walidacji schematu przed nią (`InvalidToolArgumentException`) |
 | `ServicedeskApiTest`, `TicketJsonTest`, `PlainTextTest` | kodowanie URI, treść notatki, walidacja konfiguracji (także nakładające się pola stałe notatki), dwa różne kształty API, HTML -> tekst (zakodowany tag nie wraca jako znacznik) |
 
-`TestPolicyBundle` buduje paczkę testową: przykładowe polityki kontraktów plus reguła `UPDATE` dla `add_note` (paczka przykładowa nie ma reguły zapisu dla service desku) i grupy zakresu kolejek. `StubBackend` (test) to serwer HTTP udający service desk w układzie referencyjnym; w `mcp-platform-dev` nie ma
+`TestPolicyBundle` buduje paczkę testową: przykładowe polityki kontraktów (z `credential-type.cedar`, regułami konta serwisowego, ale bez reguły `vs-narrow-call-servicedesk-queue`) i grupy zakresu kolejek. `StubBackend` (test) to serwer HTTP udający service desk w układzie referencyjnym; w `mcp-platform-dev` nie ma
 mocka service desku.
 
 ## Dokumentacja

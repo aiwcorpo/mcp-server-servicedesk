@@ -4,6 +4,8 @@ M1: osiągnięty (2026-10-27, runda 2; 2026-10-28 przeniesiony na starter 3.0.0-
 
 M3: osiągnięty (2026-10-28) - starter 3.0.0-beta-4 (kontrakty 3.1.0): `@ToolTitle`, `@ResourceRef` + `ResourceResolver` dla `ServiceDesk::Queue` i `ServiceDesk::Ticket` (klasyfikacja kolejki z systemu, brak klasyfikacji = nie tajne), wyszukiwanie ograniczone linkiem i grantami konta serwisowego (`QueryScope`), `ResultFilter` po `@ResourceRef` w trafieniu, paczka polityk i manifest (`GET /mcp-manifest` przechodzi reguły), atrybucja notatki z escapowaniem HTML/Markdown i trzema formami frazy bez zmian, 123 testów.
 
+M4: osiągnięty (2026-10-29) - starter 3.0.0-beta-7 (kontrakty 4.1.0), `accepted-credential-types: [service-account]` na stałe, tryb `serverConfiguredQueues` i `MCP_SERVICEDESK_ALLOWED_QUEUES` usunięte (CC-163), kolejki wyłącznie z grantów paczki i linku, manifest jako artefakt budowy (`mcp-app/target/mcp-manifest.json`), 115 testów.
+
 Start: wygenerowany z `mcp-server-template` 7f65f8f (`./new-server.sh servicedesk`), pierwszy commit to stan
 bez zmian. Starter: BOM `pl.aiwcorpo.mcp:mcp-platform-bom:3.0.0-alpha-11` (kontrakty 2.1.1). M2 nie jest
 zaczęty.
@@ -225,3 +227,41 @@ tools 2, app 75). Start profilu `dev` na 18790 z prawdziwą paczką ws-09 (`:187
 | S-L3 odstępstwa od wektorów CC-076 | `granted-in-server-config`: granty z paczki i lista serwera obowiązują naraz, więc kolejka tylko z listy serwera jest odmawiana (ostrzej niż wektor). `no-queue-grant`: `get_ticket` bez grantów czyta zgłoszenie i kolejkę z systemu, zanim odmówi w metodzie (odpowiedź bez wycieku, ale system jest pytany) |
 | S-L4 audyt | odmowa grantu pisze `policy_decision` (`decision: deny`, `reason: not_granted`, typ i id zasobu, `policyRevision` z tokenu) przez `AuditLogger` startera |
 | S-L5 TOCTOU `add_note` | `addNote` czyta zgłoszenie jeszcze raz tuż przed zapisem i odmawia, gdy jego kolejka nie przechodzi zakresu; okno między tym odczytem a `POST` zostaje (brak zapisu warunkowego w generycznym REST) |
+
+## M4 (2026-10-29)
+
+Kamienie pośrednie: (1) beta-7 z usunięciem trybu kolejek z konfiguracji i testami granic, (2) README, dokumentacja,
+STATUS i obraz.
+
+| Punkt | Status |
+| --- | --- |
+| Typy poświadczeń (CC-166, CC-168) | `manifest.accepted-credential-types: [service-account]` w `application.yml`, bez zmiennej środowiskowej i bez `credential-type`; test `ProductionConfigurationTest` pilnuje jednego typu i braku kluczy `servicedesk.access.*`. Poświadczenie `user-secret` kończy się `internal_error` przed narzędziem, system nie jest wołany (`QueueBoundaryTest`) |
+| Usunięty tryb z konfiguracji (CC-163) | skasowane: `CredentialMode`, `QueueAccessPolicy`, `ServicedeskAccessProperties`, `MCP_SERVICEDESK_ALLOWED_QUEUES`, `MCP_SERVICEDESK_CREDENTIAL_MODE`, `ServicedeskUseCase.serviceAccountCall`, `ServicedeskResourcePort.callerIsServiceAccount`, `NoAllowedQueuesTest`, `UserSecretModeTest`, `QueueAccessPolicyTest`. Notatka zawsze z linią o zleceniodawcy |
+| Kolejki tylko z paczki | `ServicedeskSearchScope.permits`: link (`linkIds()`) i `grantedIds()`; `scope.nothingToQuery()` w `search_tickets` = pusty wynik bez wywołania systemu; `get_ticket` i `add_note` porównują bieżącą kolejkę zgłoszenia z grantami i linkiem |
+| `ServiceDesk::Ticket` bez zakresu kolejki | `not_found_or_denied` przed resolverem (starter, "Z beta-6 na beta-7" pkt 3): `ResourcePolicyTest.aCallerWithoutAnyQueueGroupGetsNothingThroughTheServiceAccount` sprawdza, że system nie dostaje żadnego żądania |
+| Stały tekst `not_found_or_denied` | `ServicedeskToolErrors` używa `ToolErrorCode.NOT_FOUND_OR_DENIED_MESSAGE`; testy porównują bajtowo |
+| Kolejka spoza linku w argumencie | `not_found_or_denied` (test `aLinkThatNarrowsToOneQueueHidesTheTicketsAndQueuesOfTheOthers`), patrz CC niżej |
+| Wyszukiwanie przez `StructuredQuery` | nie dotyczy: adapter REST nie buduje JQL ani CQL (kolejka w ścieżce, tekst jako zakodowana wartość); model nigdy nie podaje surowego zapytania |
+| Manifest | `aiwcorpo.mcp.platform.manifest.output-file` (testy: `target/mcp-manifest.json`), `ManifestTest.theBuildArtifactIsTheManifestTheServerPublishes`, brak `environment` poza `devstack` |
+| Licznik `mcp_audit_authentication_suppressed_total` | opisany w README ("Metryki"); serwer nie ma własnych alertów ani paneli |
+| Wersje w README | starter beta-7, kontrakty 4.1.0 |
+
+Weryfikacja: `./mvnw -B clean verify` (JDK 25) -> 115 testów, 0 błędów (application 10, integration 29, tools 2, app 74).
+
+## Propozycje CC (M4)
+
+- `CC-??? | cedar/examples`: przykład `virtual-server.cedar` ma regułę `vs-narrow-call-servicedesk-queue` (call-level), która dla
+  kolejki spoza linku odpowiada `access_denied`, a starter beta-7 (README, CC-146 c) obiecuje `not_found_or_denied`. Z
+  regułą w paczce kolejka w argumencie spoza linku daje `access_denied`; bez niej odpowiada sonda startera z regułą
+  `vs-narrow-servicedesk-queue`. Test paczki serwera wycina tę regułę (`TestPolicyBundle`). Potrzebne: usunięcie reguły
+  z przykładów albo z paczki ws-09, albo mapowanie jej odmowy na `not_found_or_denied` w starterze.
+
+## Czego potrzebuje M4 od innych strumieni
+
+- ws-09: grupy `mcp-servicedesk-queue-<id>` w `static.json` dla każdej kolejki, którą ma obsługiwać konto serwisowe (konfiguracja
+  serwera żadnej nie otwiera); paczka bez `vs-narrow-call-servicedesk-queue` (patrz wyżej).
+- ws-06/ws-05: klucz konta serwisowego w OpenBao (`secret/data/mcp/service-accounts/servicedesk`), typ `service-account` w
+  konfiguracji gateway'a dla systemu `servicedesk`.
+- ws-01: usunąć `MCP_SERVICEDESK_ALLOWED_QUEUES` i `MCP_SERVICEDESK_CREDENTIAL_MODE` z compose.
+- starter beta-8 (poprawka HIGH dla tokenu użytkownika bez grup kolejek): nie dotyczy tego serwera (tylko `service-account`); po
+  wydaniu podbić wersję i powtórzyć testy.
