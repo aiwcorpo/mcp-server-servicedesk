@@ -244,7 +244,7 @@ STATUS i obraz.
 | Wyszukiwanie przez `StructuredQuery` | nie dotyczy: adapter REST nie buduje JQL ani CQL (kolejka w ścieżce, tekst jako zakodowana wartość); model nigdy nie podaje surowego zapytania |
 | Manifest | `aiwcorpo.mcp.platform.manifest.output-file` (testy: `target/mcp-manifest.json`), `ManifestTest.theBuildArtifactIsTheManifestTheServerPublishes`, brak `environment` poza `devstack` |
 | Licznik `mcp_audit_authentication_suppressed_total` | opisany w README ("Metryki"); serwer nie ma własnych alertów ani paneli |
-| Wersje w README | starter beta-7, kontrakty 4.1.0 |
+| Wersje w README | starter beta-8, kontrakty 4.1.0 |
 
 Weryfikacja: `./mvnw -B clean verify` (JDK 25) -> 115 testów, 0 błędów (application 10, integration 29, tools 2, app 74).
 
