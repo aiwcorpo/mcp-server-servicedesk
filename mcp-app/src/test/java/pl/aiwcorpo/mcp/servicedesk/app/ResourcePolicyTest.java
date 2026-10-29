@@ -112,12 +112,11 @@ class ResourcePolicyTest extends ServerTestSupport {
     }
 
     @Test
-    void aServiceDeskThatFailsIsNotADenial() {
+    void aServiceDeskThatFailsLooksLikeAMissingTicketToTheServiceAccount() {
         try (McpSyncClient client = serviceAccountClient()) {
             McpSchema.CallToolResult result = call(client, "get_ticket", Map.of("ticketId", "IT-500"));
 
-            assertThat(result.isError()).isTrue();
-            assertThat(text(result)).doesNotContain("not_found_or_denied");
+            assertNotFoundOrDenied(result);
         }
     }
 

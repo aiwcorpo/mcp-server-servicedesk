@@ -1,6 +1,6 @@
 # mcp-servicedesk: serwer MCP platformy
 
-Serwer MCP dla service desku, zbudowany na `mcp-platform-starter` 3.0.0-beta-7 (Java 25, Spring Boot 4.1.0,
+Serwer MCP dla service desku, zbudowany na `mcp-platform-starter` 3.0.0-beta-8 (Java 25, Spring Boot 4.1.0,
 Spring AI 2.0.0, kontrakty `mcp-contracts` 4.1.0). Stoi wyłącznie za gateway'em platformy: przyjmuje ruch tylko
 po mTLS z wewnętrznym JWT gateway'a (C2), a do service desku woła z poświadczeniem, które gateway dołącza do
 każdego żądania (C3). Bez poprawnego JWT odpowiada 401, nie ma trybu anonimowego.
@@ -90,8 +90,7 @@ Kolejki otwiera tylko paczka polityk (C7): grupy `mcp-servicedesk-queue-<id>` w 
 listy kolejek ani trybu poświadczenia w konfiguracji (zmienne `MCP_SERVICEDESK_ALLOWED_QUEUES`,
 `MCP_SERVICEDESK_CREDENTIAL_MODE` i `MCP_ACCEPTED_CREDENTIAL_TYPES` nie istnieją). Wywołujący bez grupy kolejki dostaje
 `not_found_or_denied` z `get_ticket`, `add_note` i `search_tickets`, a system nie jest wołany. Kolejka w argumencie
-spoza linku wirtualnego serwera to także `not_found_or_denied`, nie `access_denied` (CC-146 c; wymaga to paczki bez
-reguły `vs-narrow-call-servicedesk-queue` z przykładów kontraktów, zob. STATUS). Kolejka jest oceniana na tym, co
+spoza linku wirtualnego serwera to także `not_found_or_denied`, nie `access_denied` (CC-146 c, mapowanie w starterze beta-8). Kolejka jest oceniana na tym, co
 system zwraca w chwili wywołania, nie na tym, co podał model:
 
 - `get_ticket`: resolver zgłoszenia pobiera je, sprawdza, że system zwrócił to samo `id` (inne `id`, np. alias albo
@@ -312,7 +311,7 @@ hosta (`mcp-gateway/scripts/run-dev-host.sh`, JWKS na `localhost:18445`) skonfig
 | `ServicedeskToolTest` | walidacja tekstu w narzędziu bez walidacji schematu przed nią (`InvalidToolArgumentException`) |
 | `ServicedeskApiTest`, `TicketJsonTest`, `PlainTextTest` | kodowanie URI, treść notatki, walidacja konfiguracji (także nakładające się pola stałe notatki), dwa różne kształty API, HTML -> tekst (zakodowany tag nie wraca jako znacznik) |
 
-`TestPolicyBundle` buduje paczkę testową: przykładowe polityki kontraktów (z `credential-type.cedar`, regułami konta serwisowego, ale bez reguły `vs-narrow-call-servicedesk-queue`) i grupy zakresu kolejek. `StubBackend` (test) to serwer HTTP udający service desk w układzie referencyjnym; w `mcp-platform-dev` nie ma
+`TestPolicyBundle` buduje paczkę testową: przykładowe polityki kontraktów (pełny zestaw, z `credential-type.cedar`) i grupy zakresu kolejek. `StubBackend` (test) to serwer HTTP udający service desk w układzie referencyjnym; w `mcp-platform-dev` nie ma
 mocka service desku.
 
 ## Dokumentacja

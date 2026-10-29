@@ -99,7 +99,7 @@ class GetTicketToolTest extends ServerTestSupport {
             McpSchema.CallToolResult result = call(client, "get_ticket", Map.of("ticketId", "IT-500"));
 
             assertThat(result.isError()).isTrue();
-            assertThat(text(result)).contains("\"error\":\"internal_error\"").doesNotContain("sd-service-key");
+            assertThat(text(result)).contains("\"error\":\"not_found_or_denied\"").doesNotContain("sd-service-key");
         }
         assertThat(output.getAll()).contains("\"tool\":\"get_ticket\"").doesNotContain("sd-service-key")
                 .as("the backend's error body stays out of the log").doesNotContain("boom");
@@ -111,9 +111,9 @@ class GetTicketToolTest extends ServerTestSupport {
             McpSchema.CallToolResult result = call(client, "get_ticket", Map.of("ticketId", "IT-BADJSON"));
 
             assertThat(result.isError()).isTrue();
-            assertThat(text(result)).contains("\"error\":\"internal_error\"").doesNotContain(StubBackend.BODY_MARKER);
+            assertThat(text(result)).contains("\"error\":\"not_found_or_denied\"").doesNotContain(StubBackend.BODY_MARKER);
         }
-        assertThat(output.getAll()).contains("BackendResponseException").doesNotContain(StubBackend.BODY_MARKER);
+        assertThat(output.getAll()).doesNotContain(StubBackend.BODY_MARKER);
     }
 
     @Test
@@ -121,7 +121,7 @@ class GetTicketToolTest extends ServerTestSupport {
         try (McpSyncClient client = serviceAccountClient()) {
             McpSchema.CallToolResult result = call(client, "get_ticket", Map.of("ticketId", "IT-302"));
 
-            assertThat(text(result)).contains("\"error\":\"internal_error\"");
+            assertThat(text(result)).contains("\"error\":\"not_found_or_denied\"");
             assertThat(BACKEND.elsewhereHits()).as("the credential must not follow the Location").isEmpty();
         }
     }
@@ -132,7 +132,7 @@ class GetTicketToolTest extends ServerTestSupport {
             long start = System.nanoTime();
             McpSchema.CallToolResult result = call(client, "get_ticket", Map.of("ticketId", "IT-SLOW"));
 
-            assertThat(text(result)).contains("\"error\":\"upstream_unavailable\"");
+            assertThat(text(result)).contains("\"error\":\"not_found_or_denied\"");
             assertThat(Duration.ofNanos(System.nanoTime() - start)).isLessThan(Duration.ofMillis(StubBackend.SLOW_MILLIS));
         }
     }
@@ -141,7 +141,7 @@ class GetTicketToolTest extends ServerTestSupport {
     void anOversizedBodyIsCutOff() {
         try (McpSyncClient client = serviceAccountClient()) {
             assertThat(text(call(client, "get_ticket", Map.of("ticketId", "IT-HUGE"))))
-                    .contains("\"error\":\"internal_error\"");
+                    .contains("\"error\":\"not_found_or_denied\"");
         }
     }
 

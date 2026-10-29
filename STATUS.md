@@ -4,7 +4,7 @@ M1: osiągnięty (2026-10-27, runda 2; 2026-10-28 przeniesiony na starter 3.0.0-
 
 M3: osiągnięty (2026-10-28) - starter 3.0.0-beta-4 (kontrakty 3.1.0): `@ToolTitle`, `@ResourceRef` + `ResourceResolver` dla `ServiceDesk::Queue` i `ServiceDesk::Ticket` (klasyfikacja kolejki z systemu, brak klasyfikacji = nie tajne), wyszukiwanie ograniczone linkiem i grantami konta serwisowego (`QueryScope`), `ResultFilter` po `@ResourceRef` w trafieniu, paczka polityk i manifest (`GET /mcp-manifest` przechodzi reguły), atrybucja notatki z escapowaniem HTML/Markdown i trzema formami frazy bez zmian, 123 testów.
 
-M4: osiągnięty (2026-10-29) - starter 3.0.0-beta-7 (kontrakty 4.1.0), `accepted-credential-types: [service-account]` na stałe, tryb `serverConfiguredQueues` i `MCP_SERVICEDESK_ALLOWED_QUEUES` usunięte (CC-163), kolejki wyłącznie z grantów paczki i linku, manifest jako artefakt budowy (`mcp-app/target/mcp-manifest.json`), 115 testów.
+M4: osiągnięty (2026-10-29) - starter 3.0.0-beta-8 (kontrakty 4.1.0), `accepted-credential-types: [service-account]` na stałe, tryb `serverConfiguredQueues` i `MCP_SERVICEDESK_ALLOWED_QUEUES` usunięte (CC-163), kolejki wyłącznie z grantów paczki i linku, manifest jako artefakt budowy (`mcp-app/target/mcp-manifest.json`), 115 testów.
 
 Start: wygenerowany z `mcp-server-template` 7f65f8f (`./new-server.sh servicedesk`), pierwszy commit to stan
 bez zmian. Starter: BOM `pl.aiwcorpo.mcp:mcp-platform-bom:3.0.0-alpha-11` (kontrakty 2.1.1). M2 nie jest
@@ -250,18 +250,24 @@ Weryfikacja: `./mvnw -B clean verify` (JDK 25) -> 115 testów, 0 błędów (appl
 
 ## Propozycje CC (M4)
 
-- `CC-??? | cedar/examples`: przykład `virtual-server.cedar` ma regułę `vs-narrow-call-servicedesk-queue` (call-level), która dla
-  kolejki spoza linku odpowiada `access_denied`, a starter beta-7 (README, CC-146 c) obiecuje `not_found_or_denied`. Z
-  regułą w paczce kolejka w argumencie spoza linku daje `access_denied`; bez niej odpowiada sonda startera z regułą
-  `vs-narrow-servicedesk-queue`. Test paczki serwera wycina tę regułę (`TestPolicyBundle`). Potrzebne: usunięcie reguły
-  z przykładów albo z paczki ws-09, albo mapowanie jej odmowy na `not_found_or_denied` w starterze.
+Brak. Rozbieżność reguły `vs-narrow-call-servicedesk-queue` (`access_denied` zamiast `not_found_or_denied`) zamknięta w
+starterze beta-8; `TestPolicyBundle` używa pełnego zestawu przykładów kontraktów.
+
+## Beta-8 (2026-10-29)
+
+Wersja podbita; test paczki nie wycina już reguły call-level. Zmiany zachowania startera w testach: błąd systemu przy
+rozwiązywaniu zgłoszenia (500, timeout, przekierowanie, zła lub zbyt duża odpowiedź) widzi konto serwisowe jako
+`not_found_or_denied` (`GetTicketToolTest`, `ResourcePolicyTest.aServiceDeskThatFailsLooksLikeAMissingTicketToTheServiceAccount`);
+wyjątek nie jest już logowany z nazwą klasy, test pilnuje tylko braku treści odpowiedzi w logu.
+Gałąź `nothingToQuery()` w `search_tickets` jest osiągalna tylko bez grantów, a wtedy starter odmawia wcześniej
+(`not_found_or_denied`, system nie jest wołany: `aCallerWithoutAnyQueueGroupGetsNothingThroughTheServiceAccount`); bez atrapy
+`ResourcePolicy` nie da się jej wywołać przez MCP (link z pustą listą kolejek nie przechodzi inicjalizacji klienta).
+Weryfikacja: 115 testów, 0 błędów.
 
 ## Czego potrzebuje M4 od innych strumieni
 
 - ws-09: grupy `mcp-servicedesk-queue-<id>` w `static.json` dla każdej kolejki, którą ma obsługiwać konto serwisowe (konfiguracja
-  serwera żadnej nie otwiera); paczka bez `vs-narrow-call-servicedesk-queue` (patrz wyżej).
+  serwera żadnej nie otwiera); reguły zawężenia z identyfikatorami `vs-narrow-*`.
 - ws-06/ws-05: klucz konta serwisowego w OpenBao (`secret/data/mcp/service-accounts/servicedesk`), typ `service-account` w
   konfiguracji gateway'a dla systemu `servicedesk`.
 - ws-01: usunąć `MCP_SERVICEDESK_ALLOWED_QUEUES` i `MCP_SERVICEDESK_CREDENTIAL_MODE` z compose.
-- starter beta-8 (poprawka HIGH dla tokenu użytkownika bez grup kolejek): nie dotyczy tego serwera (tylko `service-account`); po
-  wydaniu podbić wersję i powtórzyć testy.

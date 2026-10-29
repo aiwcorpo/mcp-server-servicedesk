@@ -19,7 +19,7 @@ import pl.aiwcorpo.mcp.platform.test.PolicyRepository;
 
 /**
  * The example policies of mcp-contracts (calls, reads, updates in scope, the service account rules of
- * {@code credential-type.cedar}, restricted data, links) plus one group per test queue in the scope mapping, so the
+ * {@code credential-type.cedar}, restricted data, links; unchanged) plus one group per test queue in the scope mapping, so the
  * grants of a caller can be told apart. Signed with the published test key, for tests only.
  */
 final class TestPolicyBundle {
@@ -43,7 +43,7 @@ final class TestPolicyBundle {
             files.put("schema.cedarschema", text("mcp-contracts/cedar/mcp.cedarschema"));
             files.put("entities/static.json", groups());
             for (String policy : EXAMPLE_POLICIES) {
-                files.put("policies/" + policy, withoutCallLevelQueueNarrowing(text(EXAMPLES + policy)));
+                files.put("policies/" + policy, text(EXAMPLES + policy));
             }
             byte[] archive = gzip(tar(files));
 
@@ -57,16 +57,6 @@ final class TestPolicyBundle {
         } catch (GeneralSecurityException | IOException ex) {
             throw new IllegalStateException("cannot build the test bundle", ex);
         }
-    }
-
-    /**
-     * A queue outside the link of the virtual server must answer {@code not_found_or_denied}, not {@code access_denied}
-     * (CC-146 c). The call-level example rule answers the latter before the resolver and the probe, which judge the
-     * same queue with {@code vs-narrow-servicedesk-queue} and answer the former, so the bundle of this server leaves
-     * the call-level rule out.
-     */
-    private static String withoutCallLevelQueueNarrowing(String policies) {
-        return policies.replaceAll("(?s)@id\\(\"vs-narrow-call-servicedesk-queue\"\\).*?\\n\\};\\n\\n?", "");
     }
 
     private static String groups() {
