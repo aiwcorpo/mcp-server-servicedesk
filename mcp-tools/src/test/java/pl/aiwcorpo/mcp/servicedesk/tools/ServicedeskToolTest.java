@@ -53,7 +53,7 @@ class ServicedeskToolTest {
     private final class RecordingUseCase implements ServicedeskUseCase {
 
         @Override
-        public TicketSearch searchTickets(String queue, String text, Predicate<String> allowed) {
+        public TicketSearch searchTickets(String queue, String text, Predicate<ClassifiedTicket> allowed) {
             calls.add("search " + queue);
             return new TicketSearch(queue, List.of(), false);
         }
@@ -64,12 +64,12 @@ class ServicedeskToolTest {
         }
 
         @Override
-        public Map<String, ClassifiedTicket> findTickets(Collection<String> ticketIds) {
+        public Map<String, ClassifiedTicket> findTickets(Collection<String> ticketIds, Predicate<String> queueAllowed) {
             return Map.of();
         }
 
         @Override
-        public NoteReceipt addNote(String ticketId, String body, Predicate<String> allowed) {
+        public NoteReceipt addNote(String ticketId, String body, Predicate<ClassifiedTicket> allowed) {
             calls.add("note " + ticketId);
             return new NoteReceipt(ticketId, null);
         }

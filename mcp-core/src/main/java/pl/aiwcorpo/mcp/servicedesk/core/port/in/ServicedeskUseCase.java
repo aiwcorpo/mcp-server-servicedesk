@@ -25,18 +25,22 @@ public interface ServicedeskUseCase {
     /**
      * The tickets the caller may be shown, with their queues, keyed by the requested id; absent for the ones that are
      * missing, hidden or reported without a usable queue. The queue of a result is looked up once per queue.
+     *
+     * @param queueAllowed whether the caller may be served this queue at all; a ticket in a queue it refuses is dropped
+     *                     before the queue is read, so the number of calls to the service desk does not tell whether a
+     *                     ticket outside the caller's grants exists
      */
-    Map<String, ClassifiedTicket> findTickets(Collection<String> ticketIds);
+    Map<String, ClassifiedTicket> findTickets(Collection<String> ticketIds, Predicate<String> queueAllowed);
 
     /**
-     * @param currentQueueAllowed judges the queue the service desk reports for a hit now; a hit it refuses is left out
-     *                            (the caller's grants and link, which the index may lag behind)
+     * @param currentlyAllowed judges a hit as the service desk describes it now; a hit it refuses is left out (the
+     *                        caller's grants, link and policy, which the index may lag behind)
      */
-    TicketSearch searchTickets(String queue, String text, Predicate<String> currentQueueAllowed);
+    TicketSearch searchTickets(String queue, String text, Predicate<ClassifiedTicket> currentlyAllowed);
 
     /**
-     * Reads the ticket again just before writing and refuses when its queue is no longer one {@code currentQueueAllowed}
-     * accepts; a move between that read and the write stays possible (no conditional write in generic REST).
+     * Reads the ticket again just before writing and refuses when the ticket is no longer one {@code currentlyAllowed}
+     * accepts (queue grants, link, restricted classification); a move between that read and the write stays possible (no conditional write in generic REST).
      */
-    NoteReceipt addNote(String ticketId, String body, Predicate<String> currentQueueAllowed);
+    NoteReceipt addNote(String ticketId, String body, Predicate<ClassifiedTicket> currentlyAllowed);
 }

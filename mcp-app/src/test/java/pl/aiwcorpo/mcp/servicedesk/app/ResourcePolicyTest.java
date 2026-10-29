@@ -71,9 +71,22 @@ class ResourcePolicyTest extends ServerTestSupport {
             assertThat(text(outside)).isEqualTo(text(missing));
             assertNotFoundOrDenied(call(client, "add_note", Map.of("ticketId", "FIN-7", "body", "x")));
         }
-        assertThat(BACKEND.requests()).as("FIN-7 is read to learn its queue and judged there; nothing is written")
-                .noneMatch(request -> request.startsWith("POST"));
+        assertThat(BACKEND.requests()).as("FIN-7 is read to learn its queue; the queue outside the grants is never asked for")
+                .doesNotContain("GET /api/v1/queues/FIN").noneMatch(request -> request.startsWith("POST"));
         assertThat(BACKEND.noteBodies()).isEmpty();
+    }
+
+    @Test
+    void theNumberOfCallsDoesNotTellWhetherATicketOutsideTheGrantsExists() {
+        try (McpSyncClient client = serviceAccountClient()) {
+            call(client, "get_ticket", Map.of("ticketId", "FIN-7"));
+            List<String> existing = List.copyOf(BACKEND.requests());
+            BACKEND.reset();
+            call(client, "get_ticket", Map.of("ticketId", "NOPE-1"));
+            List<String> missing = List.copyOf(BACKEND.requests());
+
+            assertThat(existing).hasSameSizeAs(missing).hasSize(1);
+        }
     }
 
     @Test
@@ -122,17 +135,20 @@ class ResourcePolicyTest extends ServerTestSupport {
 
     @Test
     void aLinkThatNarrowsToOneQueueHidesTheTicketsAndQueuesOfTheOthers() {
+        McpSchema.CallToolResult outsideLink;
         try (McpSyncClient client = clientAs(
                 user -> user.virtualServer("it-only", Map.of("servicedeskQueues", List.of("IT"))), SERVICE_KEY,
                 BackendCredential.Type.SERVICE_ACCOUNT)) {
             assertThat(call(client, "get_ticket", Map.of("ticketId", "IT-1")).isError()).isFalse();
             assertNotFoundOrDenied(call(client, "get_ticket", Map.of("ticketId", "OPS-5")));
-            McpSchema.CallToolResult outsideLink = call(client, "search_tickets", Map.of("queue", "OPS", "text", "x"));
-            McpSchema.CallToolResult missing = call(client, "search_tickets", Map.of("queue", "NOPE", "text", "x"));
+            outsideLink = call(client, "search_tickets", Map.of("queue", "OPS", "text", "x"));
             assertNotFoundOrDenied(outsideLink);
-            assertThat(text(outsideLink)).as("CC-146 c: the queue outside the link is not told from a missing one")
-                    .isEqualTo(text(missing));
             assertNotFoundOrDenied(call(client, "add_note", Map.of("ticketId", "OPS-5", "body", "x")));
+        }
+        try (McpSyncClient client = serviceAccountClient()) {
+            McpSchema.CallToolResult grantedButMissing = call(client, "search_tickets", Map.of("queue", "GONE", "text", "x"));
+            assertThat(text(outsideLink)).as("CC-146 c: outside the link looks like a granted queue the service desk does not have")
+                    .isEqualTo(text(grantedButMissing));
         }
         assertThat(BACKEND.noteBodies()).isEmpty();
     }

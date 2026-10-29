@@ -5,13 +5,14 @@ import org.springframework.stereotype.Component;
 import pl.aiwcorpo.mcp.cedar.entities.ResolvedResource;
 import pl.aiwcorpo.mcp.platform.resource.ResourceResolver;
 import pl.aiwcorpo.mcp.servicedesk.core.domain.Queue;
+import pl.aiwcorpo.mcp.servicedesk.core.domain.ServicedeskResourceDescription;
 import pl.aiwcorpo.mcp.servicedesk.core.domain.ServicedeskResourceModel;
 import pl.aiwcorpo.mcp.servicedesk.core.port.in.ServicedeskUseCase;
 
 /**
- * Tells the starter what a queue id is before the tool runs. Empty for a queue that does not exist, that the service
- * desk hides; a failing service desk throws and the client sees
- * {@code upstream_unavailable}.
+ * Tells the starter what a queue id is before the tool runs. Empty for a queue that does not exist or that the service
+ * desk hides from the service account; a failing service desk throws and the client sees {@code upstream_unavailable}.
+ * Whether the caller is granted the queue is the starter's question, asked before this resolver is called.
  */
 @Component
 class ServicedeskQueueResolver implements ResourceResolver<Queue> {

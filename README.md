@@ -1,6 +1,6 @@
 # mcp-servicedesk: serwer MCP platformy
 
-Serwer MCP dla service desku, zbudowany na `mcp-platform-starter` 3.0.0-beta-8 (Java 25, Spring Boot 4.1.0,
+Serwer MCP dla service desku, zbudowany na `mcp-platform-starter` 3.0.0-beta-9 (Java 25, Spring Boot 4.1.0,
 Spring AI 2.0.0, kontrakty `mcp-contracts` 4.1.0). Stoi wyłącznie za gateway'em platformy: przyjmuje ruch tylko
 po mTLS z wewnętrznym JWT gateway'a (C2), a do service desku woła z poświadczeniem, które gateway dołącza do
 każdego żądania (C3). Bez poprawnego JWT odpowiada 401, nie ma trybu anonimowego.
@@ -31,11 +31,11 @@ JWKS z kluczy testowych kontraktów i podpisuje wewnętrzne JWT, a `StubBackend`
 
 | Moduł | Co w nim jest | W tym serwerze |
 | --- | --- | --- |
-| `mcp-core` | domena i porty | `Ticket`, `Queue`, `ClassifiedTicket`, `ServicedeskResourceModel`, `TicketSummary`, `TicketSearch`, `NoteReceipt`, `TicketNotFoundException`, `Identifiers` (wzorce z kontraktu), `QueueAccessPolicy` + `CredentialMode` (granica kolejek), porty `ServicedeskUseCase` i `ServicedeskResourcePort` |
+| `mcp-core` | domena i porty | `Ticket`, `Queue`, `ClassifiedTicket`, `ServicedeskResourceModel`, `TicketSummary`, `TicketSearch`, `NoteReceipt`, `TicketNotFoundException`, `Identifiers` (wzorce z kontraktu), `QueueGrants` (kolejki z grantów i linku), `ServicedeskResourceDescription` (opis dla polityki), porty `ServicedeskUseCase` i `ServicedeskResourcePort` |
 | `mcp-application` | przypadki użycia (bez Springa) | `ServicedeskService`: kontrola kolejki przed i po wywołaniu systemu, wyszukiwanie ticketów i kolejek dla resolverów, filtr wyników wyszukiwania |
 | `mcp-integration` | adaptery wyjściowe do systemu | `ServicedeskResourceAdapter` (REST, poświadczenie z C3, timeouty, bez przekierowań), `ServicedeskApi` + `ServicedeskApiProperties` (kształt API z konfiguracji, walidowany przy starcie), `TicketJson` (pola przez JSON pointer), `PlainText` (HTML -> tekst), `ServicedeskQueueResolver` i `ServicedeskTicketResolver` (`ResourceResolver` dla `ServiceDesk::Queue` i `ServiceDesk::Ticket`) |
 | `mcp-tools` | narzędzia MCP, powierzchnia publiczna | `ServicedeskTool` (`search_tickets`, `get_ticket`, `add_note`; limity i wzorce kontraktu w `@ArgumentLimits`), `ServicedeskSearchScope` (zakres wyszukiwania z `QueryScope`), `ServicedeskToolErrors` |
-| `mcp-app` | bootstrap, wiring, jedyny jar, testy end-to-end | `McpToolsConfiguration` (lista narzędzi), `ApplicationWiringConfiguration`, `ServicedeskAccessProperties` |
+| `mcp-app` | bootstrap, wiring, jedyny jar, testy end-to-end | `McpToolsConfiguration` (lista narzędzi), `ApplicationWiringConfiguration` |
 
 Zależności idą do środka: `mcp-tools` -> `mcp-application` -> `mcp-core` <- `mcp-integration`; `mcp-app` składa
 całość. Resolwery zasobów są w `mcp-integration` obok adaptera, bo atrybuty zasobu (kolejka, klasyfikacja)
@@ -50,14 +50,14 @@ pochodzą z systemu.
 | `add_note` | Dodaj notatkę do zgłoszenia | `UPDATE` | `update` | `mcp-servicedesk-write` | jw. | `ticketId` (`@ResourceRef` `ServiceDesk::Ticket`), `body` 1-10000 znaków | `{ticketId, noteId}` (`noteId` null, gdy system go nie zwraca) |
 
 Klient widzi nazwy z prefiksem `servicedesk__` (dokłada go gateway, C5). Wzorce identyfikatorów są z
-`mcp-contracts` 3.1.0, czytane z kontraktu (`^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`), te same w `inputSchema`, w walidacji narzędzia, w
-konfiguracji kolejek i przy wartościach zwracanych przez system.
+`mcp-contracts` 4.1.0, czytane z kontraktu (`^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`), te same w `inputSchema`, w walidacji narzędzia i przy wartościach zwracanych przez system.
 
 Błędy (C10): `not_found_or_denied` z jednym tekstem (tekst startera) dla zgłoszenia lub kolejki nieistniejącej,
-ukrytej przez system (404, 403), spoza dozwolonych kolejek i `restricted`; `access_denied` bez grupy narzędzia
-(też gdy kolejka z argumentu `search_tickets` leży poza linkiem wirtualnego serwera: tak rozstrzyga reguła
-wywołania w paczce kontraktów); `credential_required` przy braku poświadczenia i przy 401 z
-systemu (także 401 na zapisie notatki); `invalid_argument`; `upstream_unavailable` (system nieosiągalny, 502-504);
+ukrytej przez system (404, 403), spoza przyznanych kolejek, poza linkiem (także kolejka z argumentu `search_tickets`) i
+`restricted`; to samo przy awarii systemu przy odczycie zgłoszenia (500, timeout, przekierowanie, zła odpowiedź), bo konto
+serwisowe nie może po niej poznać, czy zgłoszenie istnieje (starter beta-8; przyczynę zapisują log `resolver_failed_hidden`
+i audyt `upstream_unavailable`, beta-9); `access_denied` bez grupy narzędzia; `credential_required` przy braku poświadczenia i przy 401 z
+systemu (także 401 na zapisie notatki); `invalid_argument`; `upstream_unavailable` (kolejka, zapis notatki i wyszukiwanie: system nieosiągalny, 502-504);
 `internal_error` (inne błędy systemu, nieczytelna odpowiedź, przekierowanie, odpowiedź ponad limit rozmiaru).
 Argumenty łamiące `inputSchema` (wzorzec, długość, brak pola, pole nadmiarowe) odrzuca starter jako
 `invalid_argument` ze zdarzeniem audytu C8, bez wartości argumentu i bez nazw spoza schematu (ani w wyniku, ani
@@ -104,9 +104,10 @@ system zwraca w chwili wywołania, nie na tym, co podał model:
   zgłoszenia, które system raportuje w tej kolejce (zgłoszenia przeniesione, a nadal w indeksie, i trafienia
   z innych kolejek odpadają).
 
-Zgłoszenie przeniesione do niedozwolonej kolejki przestaje być dostępne od następnego wywołania. Między
+Zgłoszenie przeniesione do nieprzyznanej kolejki przestaje być dostępne od następnego wywołania. Między
 odczytem a zapisem notatki (dwa wywołania systemu) zostaje okno, w którym zgłoszenie może zmienić kolejkę;
-generyczne REST nie daje warunkowego zapisu (STATUS.md).
+generyczne REST nie daje warunkowego zapisu (STATUS.md). Ponowny odczyt tuż przed zapisem sprawdza granty, link i politykę
+(zgłoszenie przeniesione do kolejki `restricted` nie dostaje notatki).
 
 ## Polityka zasobów
 
@@ -129,6 +130,11 @@ Paczka polityk (`MCP_POLICY_*`, `GET /mcp-manifest`) jest wymagana poza `dev`.
 jest równy `GET /mcp-manifest`). Rejestruje go potok CI certyfikatem `mcp-registry-ci-mcp-servicedesk`; `add_note`
 (`UPDATE`) czeka w gateway'u na zatwierdzenie administratora. Manifest z `environment: dev` publikuje wyłącznie profil
 `devstack` (klucze `dev-` i ta wartość są odrzucane poza trybem dev).
+
+Artefakt powstaje w zwykłym buildzie, także z `-DskipTests`: osobne wykonanie surefire `manifest-artifact` (faza `package`,
+`skipTests=false`, tylko `ManifestArtifactTest`) uruchamia serwer w profilu `dev` i zostawia `mcp-app/target/mcp-manifest.json`.
+CI woła `./mvnw -B package` (albo `verify`) na przeglądanym commicie, wymaga tego pliku i rejestruje go; `-Dmaven.test.skip=true`
+pomija też ten krok i nie wolno go używać. Typy poświadczeń w pliku są te same co w produkcji (stałe w `application.yml`).
 
 ### Metryki
 
@@ -189,7 +195,7 @@ gateway --mTLS (CN mcp-gateway) + JWT C2 (aud mcp-servicedesk, tool add_note) + 
   starter: InternalJwtFilter (inaczej 401) -> CredentialHeaderFilter -> AuditingToolCallback (C8)
   -> starter: walidacja argumentów względem inputSchema (inaczej C10 invalid_argument + C8)
   -> starter: Cedar `call` na narzędziu, potem resolver `@ResourceRef`: ServicedeskTicketResolver ->
-     ServicedeskService (QueueAccessPolicy: tryb + typ poświadczenia, GET zgłoszenia, kontrola id i kolejki,
+     ServicedeskService (GET zgłoszenia, kontrola id; zgłoszenie z kolejki spoza grantów odpada przed GET kolejki,
      GET kolejki) -> Cedar `update` na zgłoszeniu opisanym przez system (inaczej not_found_or_denied)
   -> ServicedeskTool.addNote: walidacja body
   -> ServicedeskResourceAdapter: CredentialContext.require("servicedesk"), POST notatki
@@ -263,7 +269,7 @@ i pod systemd, a `application-dev.yml` nie ustawia już TLS, mTLS ani magazynu `
 Konfiguracja produkcyjna na hoście, z certyfikatami i Redisem środowiska `mcp-platform-dev` (`make up` już
 uruchomione). Środowisko ma certyfikat (`certs/mcp-servicedesk`, SAN `mcp-servicedesk.internal`) i użytkownika
 Redisa `mcp-servicedesk`. Mocka service desku tam nie ma, więc `MCP_SERVICEDESK_URL` wskazuje dowolny port, a
-wywołania narzędzi kończą się `upstream_unavailable`.
+wywołania narzędzi kończą się `not_found_or_denied` (awaria odczytu zgłoszenia jest dla konta serwisowego ukryta; przyczyna w logu).
 
 Magazyny PKCS12 i Redis są chronione hasłami z `$MCP_PLATFORM_DEV/.secrets/dev.env`, więc ten wariant wymaga
 ich odczytu:
@@ -293,7 +299,7 @@ hosta (`mcp-gateway/scripts/run-dev-host.sh`, JWKS na `localhost:18445`) skonfig
 
 ## Testy
 
-`./mvnw verify` (JDK 25, bez Dockera): 115 testów.
+`./mvnw verify` (JDK 25, bez Dockera): 118 testów.
 
 | Klasa | Co sprawdza |
 | --- | --- |
@@ -301,7 +307,7 @@ hosta (`mcp-gateway/scripts/run-dev-host.sh`, JWKS na `localhost:18445`) skonfig
 | `GetTicketToolTest` | poświadczenie z C3 dociera do systemu; HTML i pola dodatkowe nie wychodzą; brak poświadczenia i 401; 404 = 403; złe `ticketId` (także pole nadmiarowe) nie docierają do systemu; poświadczenie i treść błędu systemu nie trafiają do wyniku ani logu; nieczytelna odpowiedź, przekierowanie, timeout i odpowiedź ponad limit; nazwa argumentu z fałszywą linią audytu daje `invalid_argument`, zdarzenie C8 i żadnej sfałszowanej linii w logu |
 | `AddNoteToolTest` | odczyt zgłoszenia, potem POST z notatką wewnętrzną i linią o zleceniodawcy; `UPDATE` bez `readOnlyHint`/`destructiveHint`; brak poświadczenia, 401 na odczycie i na zapisie; 404, 403 i 403 na zapisie dają ten sam błąd; złe argumenty |
 | `QueueBoundaryTest` | konto serwisowe: zgłoszenie z innej kolejki, alias, bez kolejki, 403 i nieistniejące dają bajtowo ten sam błąd w `get_ticket` i `add_note`, bez żadnego zapisu; zgłoszenie przeniesione z dozwolonej kolejki przestaje być dostępne (także w wyszukiwaniu z nieaktualnym indeksem), przeniesione do dozwolonej jest dostępne; wyszukiwanie w niedozwolonej kolejce (także `it` zamiast `IT`) nie dociera do systemu; poświadczenie użytkownika jest odrzucane (`internal_error`) przed narzędziem, system nie jest wołany |
-| `ResourcePolicyTest` | zgłoszenie w kolejce `restricted`, przeniesione do niej i z kolejki spoza zakresu konta serwisowego = `not_found_or_denied` bajtowo jak nieistniejące (też `add_note`, bez zapisu); `access_denied` bez grupy; link zawęża zgłoszenia i wyniki (`STALE-1`); wyszukiwanie konta serwisowego tylko w kolejkach przyznanych grupami; kolejka bez klasyfikacji nie jest zastrzeżona; awaria systemu to nie odmowa |
+| `ResourcePolicyTest` | zgłoszenie w kolejce `restricted`, przeniesione do niej i z kolejki spoza zakresu konta serwisowego = `not_found_or_denied` bajtowo jak nieistniejące (też `add_note`, bez zapisu); `access_denied` bez grupy; link zawęża zgłoszenia i wyniki (`STALE-1`); wyszukiwanie konta serwisowego tylko w kolejkach przyznanych grupami; kolejka bez klasyfikacji nie jest zastrzeżona; awaria systemu wygląda jak brak zgłoszenia, a przyczyna jest w logu i audycie; liczba wywołań systemu nie zależy od istnienia zgłoszenia spoza grantów |
 | `ManifestTest` | `GET /mcp-manifest` przechodzi reguły `mcp-manifest`, definicje równe `tools/list` (`definitionHash`), ryzyko, `resourceRefs`, polskie tytuły, 401 bez JWT serwisowego |
 | `ProductionConfigurationTest` | konfiguracja bazowa: `client-auth: need`, paczka polityk i `state-dir` wymagane, bez kluczy testowych; backend `http` poza `dev` odrzucony (chyba że jawnie dopuszczony); `dev` na 127.0.0.1 |
 | `DevProfileLoopbackTest` | `dev` z adresem innym niż pętla zwrotna nie wstaje |

@@ -4,10 +4,16 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Predicate;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
+import pl.aiwcorpo.mcp.platform.resource.QueryScope;
+import pl.aiwcorpo.mcp.platform.resource.ResourcePolicy;
 import pl.aiwcorpo.mcp.cedar.entities.ResolvedResource;
 import pl.aiwcorpo.mcp.platform.resource.ResourceResolver;
 import pl.aiwcorpo.mcp.servicedesk.core.domain.ClassifiedTicket;
+import pl.aiwcorpo.mcp.servicedesk.core.domain.QueueGrants;
+import pl.aiwcorpo.mcp.servicedesk.core.domain.ServicedeskResourceDescription;
 import pl.aiwcorpo.mcp.servicedesk.core.domain.ServicedeskResourceModel;
 import pl.aiwcorpo.mcp.servicedesk.core.port.in.ServicedeskUseCase;
 
@@ -21,9 +27,21 @@ import pl.aiwcorpo.mcp.servicedesk.core.port.in.ServicedeskUseCase;
 class ServicedeskTicketResolver implements ResourceResolver<ClassifiedTicket> {
 
     private final ServicedeskUseCase useCase;
+    private final ObjectProvider<ResourcePolicy> policy;
 
-    ServicedeskTicketResolver(ServicedeskUseCase useCase) {
+    /** The policy depends on the resolvers, so it is looked up when a call runs, not when the resolver is built. */
+    ServicedeskTicketResolver(ServicedeskUseCase useCase, ObjectProvider<ResourcePolicy> policy) {
         this.useCase = useCase;
+        this.policy = policy;
+    }
+
+    /**
+     * A ticket in a queue the caller is not granted (or the link excludes) is dropped before its queue is read, so the
+     * calls to the service desk are the same for such a ticket and for one that does not exist.
+     */
+    private Predicate<String> grantedQueues() {
+        QueryScope scope = policy.getObject().queryScope(ServicedeskResourceModel.QUEUE_TYPE);
+        return queue -> QueueGrants.permits(scope, queue);
     }
 
     @Override
@@ -33,12 +51,12 @@ class ServicedeskTicketResolver implements ResourceResolver<ClassifiedTicket> {
 
     @Override
     public Optional<ClassifiedTicket> fetch(String ticketId) {
-        return Optional.ofNullable(useCase.findTickets(List.of(ticketId)).get(ticketId));
+        return Optional.ofNullable(useCase.findTickets(List.of(ticketId), grantedQueues()).get(ticketId));
     }
 
     @Override
     public Map<String, ClassifiedTicket> fetchAll(Collection<String> ticketIds) {
-        return useCase.findTickets(ticketIds);
+        return useCase.findTickets(ticketIds, grantedQueues());
     }
 
     @Override

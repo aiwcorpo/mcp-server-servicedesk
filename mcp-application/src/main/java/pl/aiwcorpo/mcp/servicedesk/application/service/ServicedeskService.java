@@ -45,14 +45,14 @@ public class ServicedeskService implements ServicedeskUseCase {
     }
 
     @Override
-    public Map<String, ClassifiedTicket> findTickets(Collection<String> ticketIds) {
+    public Map<String, ClassifiedTicket> findTickets(Collection<String> ticketIds, Predicate<String> queueAllowed) {
         Map<String, ClassifiedTicket> found = new LinkedHashMap<>();
         Map<String, Optional<Queue>> queues = new HashMap<>();
         for (String ticketId : ticketIds) {
             Optional<Ticket> ticket = resource.findTicket(ticketId);
             // A different id means the service desk resolved an alias or a merge; the gateway's policy saw only the
             // requested id, so such an answer is not served.
-            if (ticket.isEmpty() || !ticket.get().id().equals(ticketId)) {
+            if (ticket.isEmpty() || !ticket.get().id().equals(ticketId) || !queueAllowed.test(ticket.get().queue())) {
                 continue;
             }
             Optional<Queue> queue = queues.computeIfAbsent(ticket.get().queue(),
@@ -63,19 +63,19 @@ public class ServicedeskService implements ServicedeskUseCase {
     }
 
     @Override
-    public TicketSearch searchTickets(String queue, String text, Predicate<String> currentQueueAllowed) {
+    public TicketSearch searchTickets(String queue, String text, Predicate<ClassifiedTicket> currentlyAllowed) {
         if (!Identifiers.isQueueId(queue)) {
             throw new TicketNotFoundException();
         }
         List<TicketSummary> hits = resource.searchTickets(queue, text, SEARCH_LIMIT)
                 .orElseThrow(TicketNotFoundException::new);
         // The service desk's search may lag behind moves or match across queues; only tickets it reports in the
-        // requested queue are handed out, and the queue each of them is in now must still be one the caller may use.
+        // requested queue are handed out, and each of them must still be allowed as the service desk describes it now.
         List<TicketSummary> inQueue = hits.stream().filter(hit -> hit.queue().equals(queue)).toList();
-        Map<String, ClassifiedTicket> current = findTickets(inQueue.stream().map(TicketSummary::id).toList());
+        Map<String, ClassifiedTicket> current = findTickets(inQueue.stream().map(TicketSummary::id).toList(), anyQueue -> true);
         inQueue = inQueue.stream().filter(hit -> {
             ClassifiedTicket ticket = current.get(hit.id());
-            return ticket != null && currentQueueAllowed.test(ticket.ticket().queue());
+            return ticket != null && currentlyAllowed.test(ticket);
         }).toList();
         boolean truncated = hits.size() > SEARCH_LIMIT || inQueue.size() > SEARCH_LIMIT;
         return new TicketSearch(queue, inQueue.stream().limit(SEARCH_LIMIT).toList(), truncated);
@@ -86,9 +86,9 @@ public class ServicedeskService implements ServicedeskUseCase {
      * right before the write, because a ticket moved in between would otherwise get the note.
      */
     @Override
-    public NoteReceipt addNote(String ticketId, String body, Predicate<String> currentQueueAllowed) {
-        ClassifiedTicket ticket = findTickets(List.of(ticketId)).get(ticketId);
-        if (ticket == null || !currentQueueAllowed.test(ticket.ticket().queue())) {
+    public NoteReceipt addNote(String ticketId, String body, Predicate<ClassifiedTicket> currentlyAllowed) {
+        ClassifiedTicket ticket = findTickets(List.of(ticketId), queue -> true).get(ticketId);
+        if (ticket == null || !currentlyAllowed.test(ticket)) {
             throw new TicketNotFoundException();
         }
         String noteId = resource.addNote(ticketId, body).orElseThrow(TicketNotFoundException::new);

@@ -30,9 +30,9 @@ Niezmienniki platformy (`mcp-platform-plan/00-overview.md`) i to, gdzie serwer j
 - Profil `dev` (klucze testowe, bez mTLS) jest w jarze, ale wstaje tylko na adresie pętli zwrotnej (starter,
   test `DevProfileLoopbackTest`). Serwer, do którego łączy się gateway, działa wyłącznie w konfiguracji bazowej.
 - Serwer nie trzyma poświadczeń. Konto serwisowe service desku (`service-account`, D10) przychodzi przez C3 jak
-  każde inne; wtedy serwer jest główną granicą autoryzacji: `QueueAccessPolicy` ocenia kolejkę zwróconą przez
-  system przy każdym wywołaniu (README, "Granica kolejek"). Polityka zasobów Cedar ze startera beta dojdzie w
-  tym samym miejscu (M3).
+  każde inne. To jedyny typ, który serwer przyjmuje, więc granicą autoryzacji są granty kolejek z paczki polityk i
+  link wirtualnego serwera (`QueueGrants`, README "Granica kolejek"); konfiguracja serwera nie otwiera żadnej kolejki.
+  Zgłoszenie spoza grantów odpada przed odczytem jego kolejki, żeby liczba wywołań nie zdradzała, że istnieje.
 - Ścieżki API pochodzą z konfiguracji walidowanej przy starcie; argumenty idą tylko jako zmienne URI kodowane
   ściśle albo wartości JSON. Treść notatki dostaje stałe pola z konfiguracji (np. widoczność wewnętrzna).
 - Hinty MCP (`readOnlyHint`, `destructiveHint`) są informacją dla klienta, nie zabezpieczeniem.

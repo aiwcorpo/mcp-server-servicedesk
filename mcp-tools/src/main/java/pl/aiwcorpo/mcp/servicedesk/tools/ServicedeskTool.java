@@ -20,6 +20,8 @@ import pl.aiwcorpo.mcp.platform.text.TextHygiene;
 import pl.aiwcorpo.mcp.platform.text.UntrustedText;
 import pl.aiwcorpo.mcp.servicedesk.core.domain.ClassifiedTicket;
 import pl.aiwcorpo.mcp.servicedesk.core.domain.NoteReceipt;
+import pl.aiwcorpo.mcp.servicedesk.core.domain.QueueGrants;
+import pl.aiwcorpo.mcp.servicedesk.core.domain.ServicedeskResourceDescription;
 import pl.aiwcorpo.mcp.servicedesk.core.domain.ServicedeskResourceModel;
 import pl.aiwcorpo.mcp.servicedesk.core.domain.Ticket;
 import pl.aiwcorpo.mcp.servicedesk.core.domain.TicketNotFoundException;
@@ -75,11 +77,11 @@ public class ServicedeskTool {
         if (scope.nothingToQuery()) {
             return new TicketSearchView(queue, List.of(), false);
         }
-        if (!ServicedeskSearchScope.permits(scope, queue)) {
+        if (!QueueGrants.permits(scope, queue)) {
             throw denied(ServicedeskResourceModel.QUEUE_TYPE, queue);
         }
         return TicketSearchView.of(useCase.searchTickets(queue, searched,
-                current -> ServicedeskSearchScope.permits(scope, current)));
+                current -> stillAllowed(scope, current)));
     }
 
     @Tool(name = "get_ticket", description = "Returns one service desk ticket: id, queue, status, priority, "
@@ -114,7 +116,7 @@ public class ServicedeskTool {
         requireInScope(fetched.ticket());
         QueryScope scope = policy.queryScope(ServicedeskResourceModel.QUEUE_TYPE);
         NoteReceipt receipt = useCase.addNote(ticketId, note,
-                current -> ServicedeskSearchScope.permits(scope, current));
+                current -> stillAllowed(scope, current));
         return new NoteView(receipt.ticketId(), receipt.noteId());
     }
 
@@ -125,9 +127,17 @@ public class ServicedeskTool {
      */
     private void requireInScope(Ticket ticket) {
         QueryScope scope = policy.queryScope(ServicedeskResourceModel.QUEUE_TYPE);
-        if (!ServicedeskSearchScope.permits(scope, ticket.queue())) {
+        if (!QueueGrants.permits(scope, ticket.queue())) {
             throw denied(ServicedeskResourceModel.TICKET_TYPE, ticket.id());
         }
+    }
+
+    /**
+     * The ticket as the service desk describes it right now, judged again before a note is written and for every search
+     * hit: the grants and the link, and the policy itself (a ticket moved into a restricted queue is refused).
+     */
+    private boolean stillAllowed(QueryScope scope, ClassifiedTicket current) {
+        return QueueGrants.permits(scope, current.ticket().queue()) && policy.allows(ServicedeskResourceDescription.of(current));
     }
 
     /**

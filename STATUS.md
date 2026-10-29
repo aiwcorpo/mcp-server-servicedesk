@@ -4,7 +4,7 @@ M1: osiągnięty (2026-10-27, runda 2; 2026-10-28 przeniesiony na starter 3.0.0-
 
 M3: osiągnięty (2026-10-28) - starter 3.0.0-beta-4 (kontrakty 3.1.0): `@ToolTitle`, `@ResourceRef` + `ResourceResolver` dla `ServiceDesk::Queue` i `ServiceDesk::Ticket` (klasyfikacja kolejki z systemu, brak klasyfikacji = nie tajne), wyszukiwanie ograniczone linkiem i grantami konta serwisowego (`QueryScope`), `ResultFilter` po `@ResourceRef` w trafieniu, paczka polityk i manifest (`GET /mcp-manifest` przechodzi reguły), atrybucja notatki z escapowaniem HTML/Markdown i trzema formami frazy bez zmian, 123 testów.
 
-M4: osiągnięty (2026-10-29) - starter 3.0.0-beta-8 (kontrakty 4.1.0), `accepted-credential-types: [service-account]` na stałe, tryb `serverConfiguredQueues` i `MCP_SERVICEDESK_ALLOWED_QUEUES` usunięte (CC-163), kolejki wyłącznie z grantów paczki i linku, manifest jako artefakt budowy (`mcp-app/target/mcp-manifest.json`), 115 testów.
+M4: osiągnięty (2026-10-29) - starter 3.0.0-beta-9 (kontrakty 4.1.0), `accepted-credential-types: [service-account]` na stałe, tryb `serverConfiguredQueues` i `MCP_SERVICEDESK_ALLOWED_QUEUES` usunięte (CC-163), kolejki wyłącznie z grantów paczki i linku, manifest jako artefakt budowy (`mcp-app/target/mcp-manifest.json`), 115 testów (stan sprzed poprawek po przeglądzie).
 
 Start: wygenerowany z `mcp-server-template` 7f65f8f (`./new-server.sh servicedesk`), pierwszy commit to stan
 bez zmian. Starter: BOM `pl.aiwcorpo.mcp:mcp-platform-bom:3.0.0-alpha-11` (kontrakty 2.1.1). M2 nie jest
@@ -244,7 +244,7 @@ STATUS i obraz.
 | Wyszukiwanie przez `StructuredQuery` | nie dotyczy: adapter REST nie buduje JQL ani CQL (kolejka w ścieżce, tekst jako zakodowana wartość); model nigdy nie podaje surowego zapytania |
 | Manifest | `aiwcorpo.mcp.platform.manifest.output-file` (testy: `target/mcp-manifest.json`), `ManifestTest.theBuildArtifactIsTheManifestTheServerPublishes`, brak `environment` poza `devstack` |
 | Licznik `mcp_audit_authentication_suppressed_total` | opisany w README ("Metryki"); serwer nie ma własnych alertów ani paneli |
-| Wersje w README | starter beta-8, kontrakty 4.1.0 |
+| Wersje w README | starter beta-9, kontrakty 4.1.0 |
 
 Weryfikacja: `./mvnw -B clean verify` (JDK 25) -> 115 testów, 0 błędów (application 10, integration 29, tools 2, app 74).
 
@@ -271,3 +271,16 @@ Weryfikacja: 115 testów, 0 błędów.
 - ws-06/ws-05: klucz konta serwisowego w OpenBao (`secret/data/mcp/service-accounts/servicedesk`), typ `service-account` w
   konfiguracji gateway'a dla systemu `servicedesk`.
 - ws-01: usunąć `MCP_SERVICEDESK_ALLOWED_QUEUES` i `MCP_SERVICEDESK_CREDENTIAL_MODE` z compose.
+
+## Poprawki po przeglądzie M4 (2026-10-29), starter beta-9
+
+| Znalezisko | Status |
+| --- | --- |
+| SD-M2 wyrocznia czasowa | `ServicedeskUseCase.findTickets(ids, queueAllowed)`: zgłoszenie z kolejki spoza grantów i linku (`QueueGrants`, predykat budowany w `ServicedeskTicketResolver` z `ResourcePolicy.queryScope`, przez `ObjectProvider`, bo polityka zależy od resolverów) odpada przed `GET` kolejki. Testy: `ServicedeskServiceTest.aTicketInAQueueTheCallerMayNotHaveIsDroppedWithoutReadingItsQueue`, `ResourcePolicyTest.theNumberOfCallsDoesNotTellWhetherATicketOutsideTheGrantsExists` (po jednym `GET` dla istniejącego FIN-7 i nieistniejącego NOPE-1), brak `GET /queues/FIN` |
+| SD-M1 przyczyna awarii | starter beta-9: audyt `upstream_unavailable` i `WARN resolver_failed_hidden` ze statusem; serwer nie dubluje logu. `GetTicketToolTest` sprawdza log (`status=500`) i powód w audycie |
+| SD-L1 | `addNote` i trafienia wyszukiwania są oceniane przez `Predicate<ClassifiedTicket>`: granty, link i `ResourcePolicy.allows` na opisie zgłoszenia (zgłoszenie przeniesione do `restricted` nie dostaje notatki). Bez testu end-to-end: okno między resolverem a ponownym odczytem nie daje się wywołać przez MCP bez haka w atrapie |
+| SD-L2 | test kolejki spoza linku porównuje z kolejką przyznaną, ale nieistniejącą (`GONE`) |
+| SD-L3, SD-L4 | README, `SECURITY.md`, `overview.md` i javadoc `ServicedeskQueueResolver` zaktualizowane |
+| SD-L5 | wykonanie surefire `manifest-artifact` w fazie `package` (`skipTests=false`, tylko `ManifestArtifactTest`): `./mvnw package -DskipTests` zostawia `mcp-app/target/mcp-manifest.json` (sprawdzone na czystym `target`); README, "Manifest i rejestracja" |
+
+Weryfikacja: `./mvnw -B clean verify` -> 118 testów w modułach plus wykonanie `manifest-artifact`, 0 błędów.

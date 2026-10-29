@@ -34,6 +34,25 @@
     <build>
         <finalName>mcp-servicedesk</finalName>
         <plugins>
+            <!-- Boots the server once more in the package phase, even with -DskipTests, to leave target/mcp-manifest.json
+                 for the CI registration step (README, "Manifest i rejestracja"). -Dmaven.test.skip=true skips it too. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>manifest-artifact</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>test</goal>
+                        </goals>
+                        <configuration>
+                            <skipTests>false</skipTests>
+                            <test>ManifestArtifactTest</test>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>

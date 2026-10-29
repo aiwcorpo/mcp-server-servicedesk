@@ -101,7 +101,8 @@ class GetTicketToolTest extends ServerTestSupport {
             assertThat(result.isError()).isTrue();
             assertThat(text(result)).contains("\"error\":\"not_found_or_denied\"").doesNotContain("sd-service-key");
         }
-        assertThat(output.getAll()).contains("\"tool\":\"get_ticket\"").doesNotContain("sd-service-key")
+        assertThat(output.getAll()).contains("\"tool\":\"get_ticket\"", "event=resolver_failed_hidden", "status=500", "\"reason\":\"upstream_unavailable\"")
+                .as("the starter keeps the cause of a failure shown as a missing ticket in the log and the audit").doesNotContain("sd-service-key")
                 .as("the backend's error body stays out of the log").doesNotContain("boom");
     }
 

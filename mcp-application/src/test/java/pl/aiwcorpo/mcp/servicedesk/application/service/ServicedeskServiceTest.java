@@ -28,7 +28,7 @@ class ServicedeskServiceTest {
         desk.tickets.put("IT-1", ticket("IT-1", "IT"));
         desk.queues.put("IT", new Queue("IT", List.of("Internal")));
 
-        ClassifiedTicket found = service.findTickets(List.of("IT-1")).get("IT-1");
+        ClassifiedTicket found = service.findTickets(List.of("IT-1"), queue -> true).get("IT-1");
 
         assertThat(found.ticket().queue()).isEqualTo("IT");
         assertThat(found.queue().classification()).containsExactly("Internal");
@@ -39,10 +39,21 @@ class ServicedeskServiceTest {
         desk.tickets.put("ALIAS", ticket("IT-9", "IT"));
         desk.tickets.put("IT-2", ticket("IT-2", "IT"));
 
-        assertThat(service.findTickets(List.of("ALIAS", "NONE")))
+        assertThat(service.findTickets(List.of("ALIAS", "NONE"), queue -> true))
                 .as("ALIAS answers with another id, NONE does not exist").isEmpty();
-        assertThat(service.findTickets(List.of("IT-2")))
+        assertThat(service.findTickets(List.of("IT-2"), queue -> true))
                 .as("the queue itself is hidden from the credential: the ticket is not judged without it").isEmpty();
+    }
+
+    @Test
+    void aTicketInAQueueTheCallerMayNotHaveIsDroppedWithoutReadingItsQueue() {
+        desk.tickets.put("FIN-1", ticket("FIN-1", "FIN"));
+        desk.queues.put("FIN", new Queue("FIN", null));
+
+        assertThat(service.findTickets(List.of("FIN-1"), queue -> !queue.equals("FIN"))).isEmpty();
+        assertThat(service.findTickets(List.of("NONE"), queue -> !queue.equals("FIN"))).isEmpty();
+        assertThat(desk.reads).as("one ticket read each, like for a ticket that does not exist").isEqualTo(2);
+        assertThat(desk.queueReads).as("the queue outside the grants is never asked for").isZero();
     }
 
     @Test
@@ -52,7 +63,7 @@ class ServicedeskServiceTest {
             desk.tickets.put("IT-" + i, ticket("IT-" + i, "IT"));
         }
 
-        assertThat(service.findTickets(List.of("IT-0", "IT-1", "IT-2", "IT-3", "IT-4"))).hasSize(5);
+        assertThat(service.findTickets(List.of("IT-0", "IT-1", "IT-2", "IT-3", "IT-4"), queue -> true)).hasSize(5);
         assertThat(desk.queueReads).isEqualTo(1);
     }
 
@@ -71,10 +82,10 @@ class ServicedeskServiceTest {
         desk.tickets.put("IT-1", ticket("IT-1", "IT"));
         desk.queues.put("IT", new Queue("IT", null));
 
-        assertThatThrownBy(() -> service.addNote("IT-1", "hello", queue -> false))
+        assertThatThrownBy(() -> service.addNote("IT-1", "hello", ticket -> false))
                 .isInstanceOf(TicketNotFoundException.class);
         assertThat(desk.notes).isEmpty();
-        assertThat(service.addNote("IT-1", "hello", queue -> queue.equals("IT")).noteId()).isEqualTo("N-1");
+        assertThat(service.addNote("IT-1", "hello", ticket -> ticket.ticket().queue().equals("IT")).noteId()).isEqualTo("N-1");
         assertThat(desk.notes).containsExactly("IT-1:hello");
     }
 
@@ -85,8 +96,8 @@ class ServicedeskServiceTest {
         desk.tickets.put("IT-2", ticket("IT-2", "IT"));
         desk.hits = List.of(summary("IT-1", "IT"), summary("IT-2", "IT"));
 
-        assertThat(service.searchTickets("IT", "x", queue -> true).tickets()).hasSize(2);
-        assertThat(service.searchTickets("IT", "x", queue -> false).tickets()).isEmpty();
+        assertThat(service.searchTickets("IT", "x", ticket -> true).tickets()).hasSize(2);
+        assertThat(service.searchTickets("IT", "x", ticket -> false).tickets()).isEmpty();
     }
 
     @Test
@@ -95,12 +106,12 @@ class ServicedeskServiceTest {
         desk.queues.put("IT", new Queue("IT", null));
         desk.noteId = "";
 
-        assertThat(service.addNote("IT-1", "hello", queue -> true).noteId()).isNull();
+        assertThat(service.addNote("IT-1", "hello", ticket -> true).noteId()).isNull();
     }
 
     @Test
     void searchInAMalformedQueueNeverReachesTheServiceDesk() {
-        assertThatThrownBy(() -> service.searchTickets("bad queue", "printer", queue -> true))
+        assertThatThrownBy(() -> service.searchTickets("bad queue", "printer", ticket -> true))
                 .isInstanceOf(TicketNotFoundException.class);
         assertThat(desk.searches).isEmpty();
     }
@@ -112,7 +123,7 @@ class ServicedeskServiceTest {
         desk.hits = new ArrayList<>(IntStream.range(0, 25).mapToObj(i -> summary("IT-" + i, "IT")).toList());
         desk.hits.add(0, summary("FIN-1", "FIN"));
 
-        var search = service.searchTickets("IT", "printer", queue -> true);
+        var search = service.searchTickets("IT", "printer", ticket -> true);
 
         assertThat(search.tickets()).hasSize(20).allMatch(t -> t.queue().equals("IT"));
         assertThat(search.truncated()).isTrue();
@@ -124,7 +135,7 @@ class ServicedeskServiceTest {
         desk.tickets.put("IT-1", ticket("IT-1", "IT"));
         desk.hits = new ArrayList<>(List.of(summary("IT-1", "IT"), summary("OPS-5", "OPS")));
 
-        assertThat(service.searchTickets("IT", "printer", queue -> true).tickets()).extracting(TicketSummary::id)
+        assertThat(service.searchTickets("IT", "printer", ticket -> true).tickets()).extracting(TicketSummary::id)
                 .as("the queue asked for is the boundary")
                 .containsExactly("IT-1");
     }
