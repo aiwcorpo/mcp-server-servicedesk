@@ -25,7 +25,4 @@ public interface ServicedeskResourcePort {
 
     /** @return the note id the service desk reported (empty string when none), empty when the ticket is hidden */
     Optional<String> addNote(String ticketId, String body);
-
-    /** The credential of the current call is labelled {@code service-account} by the gateway (C3). */
-    boolean callerIsServiceAccount();
 }

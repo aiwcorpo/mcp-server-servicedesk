@@ -54,8 +54,24 @@ class ProductionConfigurationTest {
         assertThat(base.getProperty("aiwcorpo.mcp.platform.policy.main.public-key-file")).isNotNull();
         assertThat(base.getProperty("aiwcorpo.mcp.platform.policy.state-dir")).isNotNull();
         assertThat(base.getProperty("aiwcorpo.mcp.platform.policy.allow-test-keys")).isNull();
-        assertThat(String.valueOf(base.getProperty("aiwcorpo.mcp.platform.manifest.accepted-credential-types")))
-                .contains("service-account");
+    }
+
+    @Test
+    void theServiceAccountIsTheOnlyCredentialTypeAndNoQueueIsOpenedByConfiguration() throws IOException {
+        String types = "aiwcorpo.mcp.platform.manifest.accepted-credential-types";
+        PropertySource<?> base = new YamlPropertySourceLoader()
+                .load("application.yml", new ClassPathResource("application.yml")).getFirst();
+        assertThat(base.getProperty(types + "[0]")).isEqualTo("service-account");
+        assertThat(base.getProperty(types + "[1]")).isNull();
+
+        for (String resource : List.of("application.yml", "application-dev.yml")) {
+            PropertySource<?> document = new YamlPropertySourceLoader()
+                    .load(resource, new ClassPathResource(resource)).getFirst();
+            assertThat(document.getProperty("servicedesk.access.allowed-queues")).isNull();
+            assertThat(document.getProperty("servicedesk.access.credential-mode")).isNull();
+        }
+        assertThat(new YamlPropertySourceLoader().load("application-dev.yml", new ClassPathResource("application-dev.yml"))
+                .getFirst().getProperty(types + "[0]")).as("dev does not widen the base set").isNull();
     }
 
     @Test

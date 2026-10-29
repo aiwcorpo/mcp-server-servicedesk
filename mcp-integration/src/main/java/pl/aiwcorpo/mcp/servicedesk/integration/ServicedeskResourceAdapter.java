@@ -36,8 +36,8 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * Calls the service desk's REST API with the credential the gateway resolved for this request (C3): the user's
- * token or the platform's service account, never a secret of this server.
+ * Calls the service desk's REST API with the credential the gateway resolved for this request (C3): the platform's
+ * service account, never a secret of this server.
  *
  * <p>Error mapping matters for security: 404 and 403 both become "not visible" (one client-facing code,
  * {@code not_found_or_denied}), and 401 means the credential no longer works ({@code credential_required}). A
@@ -117,8 +117,7 @@ public class ServicedeskResourceAdapter implements ServicedeskResourcePort {
                     .headers(headers -> api.applyCredential(credential, headers))
                     .contentType(MediaType.APPLICATION_JSON)
                     .accept(MediaType.APPLICATION_JSON)
-                    .body(api.noteBody(credential.type() == BackendCredential.Type.SERVICE_ACCOUNT
-                            ? attributed(text) : text))
+                    .body(api.noteBody(attributed(text)))
                     .retrieve()
                     .body(String.class);
             return Optional.of(api.noteId(parseLeniently(response)));
@@ -131,11 +130,6 @@ public class ServicedeskResourceAdapter implements ServicedeskResourcePort {
         } catch (RestClientException unreadable) {
             throw new BackendResponseException("body not readable");
         }
-    }
-
-    @Override
-    public boolean callerIsServiceAccount() {
-        return CredentialContext.type().map(type -> type == BackendCredential.Type.SERVICE_ACCOUNT).orElse(false);
     }
 
     /**

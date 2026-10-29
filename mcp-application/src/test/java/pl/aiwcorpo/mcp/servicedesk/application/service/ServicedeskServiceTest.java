@@ -8,14 +8,11 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.stream.IntStream;
 import org.junit.jupiter.api.Test;
 import pl.aiwcorpo.mcp.platform.text.UntrustedText;
 import pl.aiwcorpo.mcp.servicedesk.core.domain.ClassifiedTicket;
-import pl.aiwcorpo.mcp.servicedesk.core.domain.CredentialMode;
 import pl.aiwcorpo.mcp.servicedesk.core.domain.Queue;
-import pl.aiwcorpo.mcp.servicedesk.core.domain.QueueAccessPolicy;
 import pl.aiwcorpo.mcp.servicedesk.core.domain.Ticket;
 import pl.aiwcorpo.mcp.servicedesk.core.domain.TicketNotFoundException;
 import pl.aiwcorpo.mcp.servicedesk.core.domain.TicketSummary;
@@ -24,11 +21,10 @@ import pl.aiwcorpo.mcp.servicedesk.core.port.out.ServicedeskResourcePort;
 class ServicedeskServiceTest {
 
     private final FakeServiceDesk desk = new FakeServiceDesk();
-    private final ServicedeskService service =
-            new ServicedeskService(desk, new QueueAccessPolicy(CredentialMode.SERVICE_ACCOUNT, Set.of("IT")));
+    private final ServicedeskService service = new ServicedeskService(desk);
 
     @Test
-    void aTicketOfAnAllowedQueueIsFoundWithItsQueueAndClassification() {
+    void aTicketIsFoundWithItsQueueAndClassification() {
         desk.tickets.put("IT-1", ticket("IT-1", "IT"));
         desk.queues.put("IT", new Queue("IT", List.of("Internal")));
 
@@ -39,14 +35,12 @@ class ServicedeskServiceTest {
     }
 
     @Test
-    void ticketsOfOtherQueuesAliasesAndHiddenQueuesAreNotFound() {
-        desk.tickets.put("FIN-1", ticket("FIN-1", "FIN"));
+    void aliasesMissingTicketsAndTicketsOfHiddenQueuesAreNotFound() {
         desk.tickets.put("ALIAS", ticket("IT-9", "IT"));
-        desk.queues.put("FIN", new Queue("FIN", null));
         desk.tickets.put("IT-2", ticket("IT-2", "IT"));
 
-        assertThat(service.findTickets(List.of("FIN-1", "ALIAS", "NONE")))
-                .as("FIN is not served, ALIAS answers with another id, NONE does not exist").isEmpty();
+        assertThat(service.findTickets(List.of("ALIAS", "NONE")))
+                .as("ALIAS answers with another id, NONE does not exist").isEmpty();
         assertThat(service.findTickets(List.of("IT-2")))
                 .as("the queue itself is hidden from the credential: the ticket is not judged without it").isEmpty();
     }
@@ -63,14 +57,13 @@ class ServicedeskServiceTest {
     }
 
     @Test
-    void aQueueIsFoundOnlyWhenTheServerServesItAndTheServiceDeskShowsIt() {
+    void aQueueIsFoundOnlyWhenTheServiceDeskShowsIt() {
         desk.queues.put("IT", new Queue("IT", null));
-        desk.queues.put("FIN", new Queue("FIN", null));
 
         assertThat(service.findQueue("IT")).isPresent();
-        assertThat(service.findQueue("FIN")).as("not in the list of the server").isEmpty();
-        assertThat(service.findQueue("GONE")).as("not served either").isEmpty();
-        assertThat(desk.queueReads).as("only IT reached the service desk").isEqualTo(1);
+        assertThat(service.findQueue("GONE")).as("the service desk does not show it").isEmpty();
+        assertThat(service.findQueue("bad queue")).as("not an identifier: never sent").isEmpty();
+        assertThat(desk.queueReads).as("the malformed id did not reach the service desk").isEqualTo(2);
     }
 
     @Test
@@ -86,7 +79,7 @@ class ServicedeskServiceTest {
     }
 
     @Test
-    void aServiceAccountSearchDropsHitsWhoseCurrentQueueIsRefused() {
+    void searchDropsHitsWhoseCurrentQueueIsRefused() {
         desk.queues.put("IT", new Queue("IT", null));
         desk.tickets.put("IT-1", ticket("IT-1", "IT"));
         desk.tickets.put("IT-2", ticket("IT-2", "IT"));
@@ -106,8 +99,9 @@ class ServicedeskServiceTest {
     }
 
     @Test
-    void searchInADisallowedQueueNeverReachesTheServiceDesk() {
-        assertThatThrownBy(() -> service.searchTickets("FIN", "printer", queue -> true)).isInstanceOf(TicketNotFoundException.class);
+    void searchInAMalformedQueueNeverReachesTheServiceDesk() {
+        assertThatThrownBy(() -> service.searchTickets("bad queue", "printer", queue -> true))
+                .isInstanceOf(TicketNotFoundException.class);
         assertThat(desk.searches).isEmpty();
     }
 
@@ -125,30 +119,14 @@ class ServicedeskServiceTest {
     }
 
     @Test
-    void searchDropsHitsOfAnotherAllowedQueueToo() {
-        ServicedeskService twoQueues =
-                new ServicedeskService(desk, new QueueAccessPolicy(CredentialMode.SERVICE_ACCOUNT, Set.of("IT", "OPS")));
+    void searchDropsHitsOfAnotherQueueToo() {
         desk.queues.put("IT", new Queue("IT", null));
         desk.tickets.put("IT-1", ticket("IT-1", "IT"));
         desk.hits = new ArrayList<>(List.of(summary("IT-1", "IT"), summary("OPS-5", "OPS")));
 
-        assertThat(twoQueues.searchTickets("IT", "printer", queue -> true).tickets()).extracting(TicketSummary::id)
-                .as("the queue asked for is the boundary, not only the set the server may serve")
+        assertThat(service.searchTickets("IT", "printer", queue -> true).tickets()).extracting(TicketSummary::id)
+                .as("the queue asked for is the boundary")
                 .containsExactly("IT-1");
-    }
-
-    @Test
-    void withoutAllowedQueuesNothingReachesTheServiceDesk() {
-        ServicedeskService closed =
-                new ServicedeskService(desk, new QueueAccessPolicy(CredentialMode.SERVICE_ACCOUNT, Set.of()));
-        desk.tickets.put("IT-1", ticket("IT-1", "IT"));
-
-        assertThat(closed.findTickets(List.of("IT-1"))).isEmpty();
-        assertThat(closed.findQueue("IT")).isEmpty();
-        assertThatThrownBy(() -> closed.searchTickets("IT", "x", queue -> true)).isInstanceOf(TicketNotFoundException.class);
-        assertThat(desk.reads).isZero();
-        assertThat(desk.queueReads).isZero();
-        assertThat(desk.searches).isEmpty();
     }
 
     private static Ticket ticket(String id, String queue) {
@@ -192,11 +170,6 @@ class ServicedeskServiceTest {
         public Optional<String> addNote(String ticketId, String body) {
             notes.add(ticketId + ":" + body);
             return Optional.of(noteId);
-        }
-
-        @Override
-        public boolean callerIsServiceAccount() {
-            return true;
         }
     }
 }

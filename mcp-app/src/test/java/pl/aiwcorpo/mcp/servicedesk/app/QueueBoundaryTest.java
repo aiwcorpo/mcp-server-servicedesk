@@ -12,8 +12,8 @@ import org.junit.jupiter.api.Test;
 import pl.aiwcorpo.mcp.platform.security.BackendCredential;
 
 /**
- * With the service account the service desk shows everything, so the server is the access boundary
- * (allowed queues IT, OPS, GONE in {@link ServerTestSupport}). Every way of reaching a ticket outside them must
+ * With the service account the service desk shows everything, so the grants of the caller are the access boundary
+ * (queues IT, OPS, SEC, GONE in {@link ServerTestSupport}, not FIN). Every way of reaching a ticket outside them must
  * give exactly the answer of a ticket that does not exist, and no note may be written.
  */
 class QueueBoundaryTest extends ServerTestSupport {
@@ -24,7 +24,7 @@ class QueueBoundaryTest extends ServerTestSupport {
     }
 
     @Test
-    void ticketsOutsideTheAllowedQueuesAnswerLikeMissingOnes() {
+    void ticketsOutsideTheGrantedQueuesAnswerLikeMissingOnes() {
         List<String> answers = new ArrayList<>();
         try (McpSyncClient client = serviceAccountClient()) {
             for (String ticketId : new String[] {"NOPE-1", "FIN-7", "ALIAS-1", "NOQ-1", "IT-403"}) {
@@ -42,7 +42,7 @@ class QueueBoundaryTest extends ServerTestSupport {
     }
 
     @Test
-    void aTicketMovedOutOfAnAllowedQueueIsNoLongerServed() {
+    void aTicketMovedOutOfAGrantedQueueIsNoLongerServed() {
         try (McpSyncClient client = serviceAccountClient()) {
             assertThat(call(client, "get_ticket", Map.of("ticketId", "MOVED-3")).isError()).isFalse();
 
@@ -57,7 +57,7 @@ class QueueBoundaryTest extends ServerTestSupport {
     }
 
     @Test
-    void aTicketMovedIntoAnAllowedQueueIsServed() {
+    void aTicketMovedIntoAGrantedQueueIsServed() {
         BACKEND.move("FIN-7", "OPS");
         try (McpSyncClient client = serviceAccountClient()) {
             assertThat(text(call(client, "get_ticket", Map.of("ticketId", "FIN-7")))).contains("\"queue\":\"OPS\"");
@@ -65,7 +65,7 @@ class QueueBoundaryTest extends ServerTestSupport {
     }
 
     @Test
-    void searchInAQueueOutsideTheListNeverReachesTheServiceDesk() {
+    void searchInAQueueOutsideTheGrantsNeverReachesTheServiceDesk() {
         try (McpSyncClient client = serviceAccountClient()) {
             McpSchema.CallToolResult otherQueue = call(client, "search_tickets", Map.of("queue", "FIN", "text", "x"));
             McpSchema.CallToolResult caseVariant = call(client, "search_tickets", Map.of("queue", "it", "text", "x"));
@@ -79,10 +79,16 @@ class QueueBoundaryTest extends ServerTestSupport {
     }
 
     @Test
-    void aUserCredentialDoesNotWidenTheServiceAccountMode() {
+    void aUserCredentialIsRefusedBeforeAnyToolRunsAndNothingReachesTheServiceDesk() {
         try (McpSyncClient client = clientWithCredential("Bearer user-token-of-jkowalski", BackendCredential.Type.USER_SECRET)) {
-            assertNotFoundOrDenied(call(client, "get_ticket", Map.of("ticketId", "FIN-7")));
-            assertNotFoundOrDenied(call(client, "search_tickets", Map.of("queue", "FIN", "text", "x")));
+            for (McpSchema.CallToolResult result : List.of(
+                    call(client, "get_ticket", Map.of("ticketId", "IT-1")),
+                    call(client, "search_tickets", Map.of("queue", "IT", "text", "x")),
+                    call(client, "add_note", Map.of("ticketId", "IT-1", "body", "x")))) {
+                assertThat(result.isError()).isTrue();
+                assertThat(text(result)).contains("\"error\":\"internal_error\"");
+            }
         }
+        assertThat(BACKEND.requests()).isEmpty();
     }
 }

@@ -25,7 +25,6 @@ aiwcorpo:
           public-key-file: ${MCP_POLICY_PUBLIC_KEY_FILE:../mcp-policies/keys/dev/test-policies-main-dev.public.pem}
       manifest:
         internal-url: https://mcp-servicedesk.internal:8443/mcp
-        accepted-credential-types: service-account
 
 servicedesk:
   backend:

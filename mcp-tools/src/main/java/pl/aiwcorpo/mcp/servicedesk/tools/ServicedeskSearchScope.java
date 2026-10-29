@@ -7,20 +7,19 @@ import pl.aiwcorpo.mcp.platform.resource.QueryScope;
  * desk is searched by a queue in the path and a text parameter, which the adapter builds from validated values, so
  * the scope is applied here to the one thing the model chooses, the queue.
  *
- * <p>The link of the virtual server narrows the queue. For the service account, whose rights in the service desk
- * are the platform's and not the user's, the queue must also be one the groups of the caller grant, the equivalent of
- * {@code includeGrants} in a JQL scope; a caller granted no queue searches nothing ({@code grantsNothing}), never
- * "every queue".
+ * <p>The platform's service account sees every queue of the service desk, so a queue is searched only when the groups
+ * of the caller grant it ({@link QueryScope#grantedIds()}) and the link of the virtual server, when there is one,
+ * allows it. A caller granted no queue searches nothing ({@link QueryScope#nothingToQuery()}), never "every queue".
  */
 final class ServicedeskSearchScope {
 
     private ServicedeskSearchScope() {
     }
 
-    static boolean permits(QueryScope scope, String queue, boolean serviceAccount) {
+    static boolean permits(QueryScope scope, String queue) {
         if (scope.linkIds().map(link -> !link.contains(queue)).orElse(false)) {
             return false;
         }
-        return !serviceAccount || (!scope.grantsNothing() && scope.grantedIds().contains(queue));
+        return !scope.nothingToQuery() && scope.grantedIds().contains(queue);
     }
 }

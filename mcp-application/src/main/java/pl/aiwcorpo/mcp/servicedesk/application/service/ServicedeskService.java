@@ -8,9 +8,9 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.function.Predicate;
 import pl.aiwcorpo.mcp.servicedesk.core.domain.ClassifiedTicket;
+import pl.aiwcorpo.mcp.servicedesk.core.domain.Identifiers;
 import pl.aiwcorpo.mcp.servicedesk.core.domain.NoteReceipt;
 import pl.aiwcorpo.mcp.servicedesk.core.domain.Queue;
-import pl.aiwcorpo.mcp.servicedesk.core.domain.QueueAccessPolicy;
 import pl.aiwcorpo.mcp.servicedesk.core.domain.Ticket;
 import pl.aiwcorpo.mcp.servicedesk.core.domain.TicketNotFoundException;
 import pl.aiwcorpo.mcp.servicedesk.core.domain.TicketSearch;
@@ -21,30 +21,24 @@ import pl.aiwcorpo.mcp.servicedesk.core.port.out.ServicedeskResourcePort;
 /**
  * Use cases of the server. A plain class: mcp-app makes it a bean, so this module stays free of Spring.
  *
- * <p>With a service account the service desk answers for the platform, not for the user, so the queue checks
- * here are the access boundary. They run on the queue the service desk reports for the ticket at the time of
- * the call (a ticket moved to another queue is judged by its new queue), never on what the caller claims. The
- * lookups of a queue and a ticket are what the resolvers of the policy call, so a ticket the server does not serve
- * never reaches a tool: the starter ends the call with {@code not_found_or_denied} before the method runs.
+ * <p>The service desk answers for the platform's service account, not for the user, so what the caller may see is
+ * decided outside this class: by the grants and the link of the policy bundle, which the resolvers' callers and the
+ * tools apply (the server's configuration opens no queue). Queue checks here run on the queue the service desk reports
+ * for the ticket at the time of the call (a ticket moved to another queue is judged by its new queue), never on what
+ * the caller claims. The lookups of a queue and a ticket are what the resolvers of the policy call, so a ticket in a
+ * queue the caller is not granted never reaches a tool: the starter ends the call with {@code not_found_or_denied}.
  */
 public class ServicedeskService implements ServicedeskUseCase {
 
     private final ServicedeskResourcePort resource;
-    private final QueueAccessPolicy policy;
 
-    public ServicedeskService(ServicedeskResourcePort resource, QueueAccessPolicy policy) {
+    public ServicedeskService(ServicedeskResourcePort resource) {
         this.resource = resource;
-        this.policy = policy;
-    }
-
-    @Override
-    public boolean serviceAccountCall() {
-        return policy.serviceAccountCall(resource.callerIsServiceAccount());
     }
 
     @Override
     public Optional<Queue> findQueue(String queueId) {
-        if (!policy.permits(queueId, resource.callerIsServiceAccount())) {
+        if (!Identifiers.isQueueId(queueId)) {
             return Optional.empty();
         }
         return resource.findQueue(queueId).filter(queue -> queue.id().equals(queueId));
@@ -52,18 +46,13 @@ public class ServicedeskService implements ServicedeskUseCase {
 
     @Override
     public Map<String, ClassifiedTicket> findTickets(Collection<String> ticketIds) {
-        boolean serviceAccount = resource.callerIsServiceAccount();
         Map<String, ClassifiedTicket> found = new LinkedHashMap<>();
-        if (!policy.servesAnyQueue(serviceAccount)) {
-            return found;
-        }
         Map<String, Optional<Queue>> queues = new HashMap<>();
         for (String ticketId : ticketIds) {
             Optional<Ticket> ticket = resource.findTicket(ticketId);
             // A different id means the service desk resolved an alias or a merge; the gateway's policy saw only the
             // requested id, so such an answer is not served.
-            if (ticket.isEmpty() || !ticket.get().id().equals(ticketId)
-                    || !policy.permits(ticket.get().queue(), serviceAccount)) {
+            if (ticket.isEmpty() || !ticket.get().id().equals(ticketId)) {
                 continue;
             }
             Optional<Queue> queue = queues.computeIfAbsent(ticket.get().queue(),
@@ -75,24 +64,19 @@ public class ServicedeskService implements ServicedeskUseCase {
 
     @Override
     public TicketSearch searchTickets(String queue, String text, Predicate<String> currentQueueAllowed) {
-        boolean serviceAccount = resource.callerIsServiceAccount();
-        if (!policy.permits(queue, serviceAccount)) {
+        if (!Identifiers.isQueueId(queue)) {
             throw new TicketNotFoundException();
         }
         List<TicketSummary> hits = resource.searchTickets(queue, text, SEARCH_LIMIT)
                 .orElseThrow(TicketNotFoundException::new);
         // The service desk's search may lag behind moves or match across queues; only tickets it reports in the
-        // requested queue are handed out, and the policy then judges each of them by the ticket itself.
-        List<TicketSummary> inQueue = hits.stream()
-                .filter(hit -> hit.queue().equals(queue) && policy.permits(hit.queue(), serviceAccount))
-                .toList();
-        if (policy.serviceAccountCall(serviceAccount)) {
-            Map<String, ClassifiedTicket> current = findTickets(inQueue.stream().map(TicketSummary::id).toList());
-            inQueue = inQueue.stream().filter(hit -> {
-                ClassifiedTicket ticket = current.get(hit.id());
-                return ticket != null && currentQueueAllowed.test(ticket.ticket().queue());
-            }).toList();
-        }
+        // requested queue are handed out, and the queue each of them is in now must still be one the caller may use.
+        List<TicketSummary> inQueue = hits.stream().filter(hit -> hit.queue().equals(queue)).toList();
+        Map<String, ClassifiedTicket> current = findTickets(inQueue.stream().map(TicketSummary::id).toList());
+        inQueue = inQueue.stream().filter(hit -> {
+            ClassifiedTicket ticket = current.get(hit.id());
+            return ticket != null && currentQueueAllowed.test(ticket.ticket().queue());
+        }).toList();
         boolean truncated = hits.size() > SEARCH_LIMIT || inQueue.size() > SEARCH_LIMIT;
         return new TicketSearch(queue, inQueue.stream().limit(SEARCH_LIMIT).toList(), truncated);
     }

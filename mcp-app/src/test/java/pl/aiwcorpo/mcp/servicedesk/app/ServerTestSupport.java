@@ -20,7 +20,6 @@ import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
-import org.springframework.test.context.TestPropertySource;
 import pl.aiwcorpo.mcp.platform.security.BackendCredential;
 import pl.aiwcorpo.mcp.platform.test.TestGateway;
 import tools.jackson.databind.json.JsonMapper;
@@ -31,14 +30,13 @@ import tools.jackson.databind.json.JsonMapper;
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("dev")
-@TestPropertySource(properties = {
-        "servicedesk.access.credential-mode=service-account",
-        "servicedesk.access.allowed-queues=IT,OPS,GONE,SEC"})
 abstract class ServerTestSupport {
 
     /** The platform's service account for the service desk, as the gateway injects it (C3). */
     static final String SERVICE_KEY = "ApiKey sd-service-key-7f3a91";
     static final String CALLER = "jkowalski";
+
+    static final java.nio.file.Path MANIFEST_FILE = java.nio.file.Path.of("target", "mcp-manifest.json");
 
     static final String SERVER_ID = "mcp-servicedesk";
     static final String SYSTEM = "servicedesk";
@@ -63,6 +61,12 @@ abstract class ServerTestSupport {
     @DynamicPropertySource
     static void environment(DynamicPropertyRegistry registry) {
         GATEWAY.serverProperties().forEach((name, value) -> registry.add(name, () -> value));
+        // TestGateway assumes the types of a user; this server accepts the service account only, as the gateway checks
+        // at registration (credential_type_mismatch).
+        registry.add("aiwcorpo.mcp.platform.manifest.accepted-credential-types", () -> "service-account");
+        // The artifact the build hands to the registration step: the manifest of the commit under review, not an answer
+        // of a running server (CC-133, CC-140).
+        registry.add("aiwcorpo.mcp.platform.manifest.output-file", () -> MANIFEST_FILE.toString());
         registry.add("servicedesk.backend.base-url", BACKEND::baseUrl);
         // Short limits so the timeout and size tests run quickly; StubBackend's slow and huge tickets exceed them.
         registry.add("servicedesk.backend.read-timeout", () -> "1s");

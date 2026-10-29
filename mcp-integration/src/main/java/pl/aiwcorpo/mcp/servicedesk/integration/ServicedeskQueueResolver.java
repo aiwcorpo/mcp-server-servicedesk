@@ -10,7 +10,7 @@ import pl.aiwcorpo.mcp.servicedesk.core.port.in.ServicedeskUseCase;
 
 /**
  * Tells the starter what a queue id is before the tool runs. Empty for a queue that does not exist, that the service
- * desk hides, or that a service account call may not serve; a failing service desk throws and the client sees
+ * desk hides; a failing service desk throws and the client sees
  * {@code upstream_unavailable}.
  */
 @Component

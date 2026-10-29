@@ -18,10 +18,9 @@ import java.util.zip.GZIPOutputStream;
 import pl.aiwcorpo.mcp.platform.test.PolicyRepository;
 
 /**
- * The example policies of mcp-contracts plus what the contracts' sample bundle lacks for this server: a policy for
- * the {@code UPDATE} tool {@code add_note} (the sample bundle has no service desk write rule) and one group per test
- * queue in the scope mapping, so the grants of a caller can be told apart. Signed with the published test key, for
- * tests only.
+ * The example policies of mcp-contracts (calls, reads, updates in scope, the service account rules of
+ * {@code credential-type.cedar}, restricted data, links) plus one group per test queue in the scope mapping, so the
+ * grants of a caller can be told apart. Signed with the published test key, for tests only.
  */
 final class TestPolicyBundle {
 
@@ -29,24 +28,8 @@ final class TestPolicyBundle {
     static final List<String> QUEUES = List.of("IT", "OPS", "SEC", "GONE", "FIN");
 
     private static final String EXAMPLES = "mcp-contracts/cedar/examples/";
-    private static final List<String> EXAMPLE_POLICIES = List.of("call-tool.cedar", "forbid-restricted.cedar",
-            "read.cedar", "step-up.cedar", "update.cedar", "virtual-server.cedar");
-    private static final String WRITE_POLICY = """
-            @id("servicedesk-call-update")
-            permit (
-              principal in UserGroup::"mcp-servicedesk-write",
-              action == Action::"call",
-              resource is Tool
-            )
-            when { resource.server == "mcp-servicedesk" && resource.risk == "UPDATE" };
-
-            @id("servicedesk-update-ticket")
-            permit (
-              principal in UserGroup::"mcp-servicedesk-write",
-              action == Action::"update",
-              resource is ServiceDesk::Ticket
-            );
-            """;
+    private static final List<String> EXAMPLE_POLICIES = List.of("call-tool.cedar", "credential-type.cedar",
+            "forbid-restricted.cedar", "read.cedar", "step-up.cedar", "update.cedar", "virtual-server.cedar");
 
     private TestPolicyBundle() {
     }
@@ -60,9 +43,8 @@ final class TestPolicyBundle {
             files.put("schema.cedarschema", text("mcp-contracts/cedar/mcp.cedarschema"));
             files.put("entities/static.json", groups());
             for (String policy : EXAMPLE_POLICIES) {
-                files.put("policies/" + policy, text(EXAMPLES + policy));
+                files.put("policies/" + policy, withoutCallLevelQueueNarrowing(text(EXAMPLES + policy)));
             }
-            files.put("policies/servicedesk-write.cedar", WRITE_POLICY);
             byte[] archive = gzip(tar(files));
 
             String pem = text("mcp-contracts/test-vectors/keys/test-policy-bundle.NOT-FOR-PRODUCTION.private.pem")
@@ -75,6 +57,16 @@ final class TestPolicyBundle {
         } catch (GeneralSecurityException | IOException ex) {
             throw new IllegalStateException("cannot build the test bundle", ex);
         }
+    }
+
+    /**
+     * A queue outside the link of the virtual server must answer {@code not_found_or_denied}, not {@code access_denied}
+     * (CC-146 c). The call-level example rule answers the latter before the resolver and the probe, which judge the
+     * same queue with {@code vs-narrow-servicedesk-queue} and answer the former, so the bundle of this server leaves
+     * the call-level rule out.
+     */
+    private static String withoutCallLevelQueueNarrowing(String policies) {
+        return policies.replaceAll("(?s)@id\\(\"vs-narrow-call-servicedesk-queue\"\\).*?\\n\\};\\n\\n?", "");
     }
 
     private static String groups() {

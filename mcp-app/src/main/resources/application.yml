@@ -43,7 +43,8 @@ aiwcorpo:
       manifest:
         version: '@project.version@'
         internal-url: ${MCP_INTERNAL_URL:}
-        accepted-credential-types: ${MCP_ACCEPTED_CREDENTIAL_TYPES:service-account}
+        # Fixed, not configurable: this server uses only the service account the gateway injects (C3, CC-166).
+        accepted-credential-types: [service-account]
 
 servicedesk:
   backend:
@@ -54,12 +55,6 @@ servicedesk:
     max-response-size: 1MB
     # Plain http outside 'dev' only for the mocks of mcp-platform-dev; never in a real deployment.
     allow-plain-http: ${MCP_SERVICEDESK_ALLOW_PLAIN_HTTP:false}
-  access:
-    # service-account (D10): the service desk does not know the user, so the server serves only the queues
-    # listed below and refuses everything when the list is empty. user-secret: the user's own token decides,
-    # a non-empty list narrows it further.
-    credential-mode: ${MCP_SERVICEDESK_CREDENTIAL_MODE:service-account}
-    allowed-queues: ${MCP_SERVICEDESK_ALLOWED_QUEUES:}
   # Reference REST layout of the generic adapter (D10, product not chosen). For a concrete product, override
   # this block from a file given in --spring.config.additional-location (README, "Adapter REST").
   api:

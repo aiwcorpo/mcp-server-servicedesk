@@ -56,8 +56,8 @@ public class ServicedeskTool {
 
     /**
      * The queue is a {@code @ResourceRef}: a queue that is missing, hidden, restricted, outside the link of the
-     * virtual server or outside this server's list gives the one {@code not_found_or_denied} before the service desk
-     * is searched. The hits are judged again one by one by their {@code @ResourceRef} component.
+     * virtual server gives the one {@code not_found_or_denied} before the service desk is searched, and a caller granted
+     * no queue gets an empty result without a call to it. The hits are judged again one by one by their {@code @ResourceRef} component.
      */
     @Tool(name = "search_tickets", description = "Searches the tickets of one service desk queue for a text. "
             + "Returns at most 20 tickets of that queue: id, queue, status, last update and subject. "
@@ -72,12 +72,14 @@ public class ServicedeskTool {
             @ArgumentLimits(minLength = 1, maxLength = TEXT_MAX) String text) {
         String searched = validText("text", text, TEXT_MAX);
         QueryScope scope = policy.queryScope(ServicedeskResourceModel.QUEUE_TYPE);
-        boolean serviceAccount = useCase.serviceAccountCall();
-        if (!ServicedeskSearchScope.permits(scope, queue, serviceAccount)) {
+        if (scope.nothingToQuery()) {
+            return new TicketSearchView(queue, List.of(), false);
+        }
+        if (!ServicedeskSearchScope.permits(scope, queue)) {
             throw denied(ServicedeskResourceModel.QUEUE_TYPE, queue);
         }
         return TicketSearchView.of(useCase.searchTickets(queue, searched,
-                current -> ServicedeskSearchScope.permits(scope, current, serviceAccount)));
+                current -> ServicedeskSearchScope.permits(scope, current)));
     }
 
     @Tool(name = "get_ticket", description = "Returns one service desk ticket: id, queue, status, priority, "
@@ -111,20 +113,19 @@ public class ServicedeskTool {
                 .fetched(ServicedeskResourceModel.TICKET_TYPE, ticketId, ClassifiedTicket.class).orElseThrow();
         requireInScope(fetched.ticket());
         QueryScope scope = policy.queryScope(ServicedeskResourceModel.QUEUE_TYPE);
-        boolean serviceAccount = useCase.serviceAccountCall();
         NoteReceipt receipt = useCase.addNote(ticketId, note,
-                current -> ServicedeskSearchScope.permits(scope, current, serviceAccount));
+                current -> ServicedeskSearchScope.permits(scope, current));
         return new NoteView(receipt.ticketId(), receipt.noteId());
     }
 
     /**
-     * The service account sees every queue, so for it the queue the service desk reports for the ticket now must be
-     * one the caller's groups grant (and the link allows): CC-076, no scope means no access. Same answer as a missing
+     * The service account sees every queue, so the queue the service desk reports for the ticket now must be one the
+     * caller's groups grant (and the link allows): CC-076, CC-163, no scope means no access. Same answer as a missing
      * ticket, raised before anything is written or returned.
      */
     private void requireInScope(Ticket ticket) {
         QueryScope scope = policy.queryScope(ServicedeskResourceModel.QUEUE_TYPE);
-        if (!ServicedeskSearchScope.permits(scope, ticket.queue(), useCase.serviceAccountCall())) {
+        if (!ServicedeskSearchScope.permits(scope, ticket.queue())) {
             throw denied(ServicedeskResourceModel.TICKET_TYPE, ticket.id());
         }
     }

@@ -12,8 +12,8 @@ import pl.aiwcorpo.mcp.platform.security.BackendCredential;
 
 /**
  * The policy (C7) on the queue and the ticket, with the example policies of the contracts: an object is judged by what
- * the service desk says about it now, and every refusal looks like a missing object. The server's own queue list
- * (CC-076) stays in force under it.
+ * the service desk says about it now, and every refusal looks like a missing object. The server's configuration opens
+ * no queue (CC-163): the grants of the bundle are the only source.
  */
 class ResourcePolicyTest extends ServerTestSupport {
 
@@ -62,7 +62,7 @@ class ResourcePolicyTest extends ServerTestSupport {
     }
 
     @Test
-    void aTicketFromAQueueOutsideTheServiceAccountsScopeIsNotFoundOrDenied() {
+    void aTicketFromAQueueTheCallerIsNotGrantedIsNotFoundOrDenied() {
         try (McpSyncClient client = serviceAccountClient()) {
             McpSchema.CallToolResult outside = call(client, "get_ticket", Map.of("ticketId", "FIN-7"));
             McpSchema.CallToolResult missing = call(client, "get_ticket", Map.of("ticketId", "NOPE-1"));
@@ -71,8 +71,8 @@ class ResourcePolicyTest extends ServerTestSupport {
             assertThat(text(outside)).isEqualTo(text(missing));
             assertNotFoundOrDenied(call(client, "add_note", Map.of("ticketId", "FIN-7", "body", "x")));
         }
-        assertThat(BACKEND.requests()).as("FIN-7 is read to learn its queue, its queue is never asked for")
-                .doesNotContain("GET /api/v1/queues/FIN");
+        assertThat(BACKEND.requests()).as("FIN-7 is read to learn its queue and judged there; nothing is written")
+                .noneMatch(request -> request.startsWith("POST"));
         assertThat(BACKEND.noteBodies()).isEmpty();
     }
 
@@ -128,9 +128,11 @@ class ResourcePolicyTest extends ServerTestSupport {
                 BackendCredential.Type.SERVICE_ACCOUNT)) {
             assertThat(call(client, "get_ticket", Map.of("ticketId", "IT-1")).isError()).isFalse();
             assertNotFoundOrDenied(call(client, "get_ticket", Map.of("ticketId", "OPS-5")));
-            assertThat(text(call(client, "search_tickets", Map.of("queue", "OPS", "text", "x"))))
-                    .as("the call-level rule of the bundle checks the queue argument against the link")
-                    .contains("\"error\":\"access_denied\"");
+            McpSchema.CallToolResult outsideLink = call(client, "search_tickets", Map.of("queue", "OPS", "text", "x"));
+            McpSchema.CallToolResult missing = call(client, "search_tickets", Map.of("queue", "NOPE", "text", "x"));
+            assertNotFoundOrDenied(outsideLink);
+            assertThat(text(outsideLink)).as("CC-146 c: the queue outside the link is not told from a missing one")
+                    .isEqualTo(text(missing));
             assertNotFoundOrDenied(call(client, "add_note", Map.of("ticketId", "OPS-5", "body", "x")));
         }
         assertThat(BACKEND.noteBodies()).isEmpty();
@@ -222,7 +224,9 @@ class ResourcePolicyTest extends ServerTestSupport {
                 BackendCredential.Type.SERVICE_ACCOUNT)) {
             assertNotFoundOrDenied(call(client, "get_ticket", Map.of("ticketId", "IT-1")));
             assertNotFoundOrDenied(call(client, "add_note", Map.of("ticketId", "IT-1", "body", "x")));
+            assertNotFoundOrDenied(call(client, "search_tickets", Map.of("queue", "IT", "text", "x")));
         }
-        assertThat(BACKEND.noteBodies()).isEmpty();
+        assertThat(BACKEND.requests()).as("no queue scope: refused before the resolver, the service desk is not asked")
+                .isEmpty();
     }
 }

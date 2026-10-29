@@ -69,11 +69,6 @@ class ServicedeskToolTest {
         }
 
         @Override
-        public boolean serviceAccountCall() {
-            return true;
-        }
-
-        @Override
         public NoteReceipt addNote(String ticketId, String body, Predicate<String> allowed) {
             calls.add("note " + ticketId);
             return new NoteReceipt(ticketId, null);
