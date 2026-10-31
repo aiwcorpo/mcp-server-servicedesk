@@ -1,7 +1,7 @@
 # mcp-servicedesk: serwer MCP platformy
 
-Serwer MCP dla service desku, zbudowany na `mcp-platform-starter` 3.0.0-beta-9 (Java 25, Spring Boot 4.1.0,
-Spring AI 2.0.0, kontrakty `mcp-contracts` 4.1.0). Stoi wyłącznie za gateway'em platformy: przyjmuje ruch tylko
+Serwer MCP dla service desku, zbudowany na `mcp-platform-starter` 3.0.0-beta-10 (Java 25, Spring Boot 4.1.0,
+Spring AI 2.0.0, kontrakty `mcp-contracts` 5.1.0). Stoi wyłącznie za gateway'em platformy: przyjmuje ruch tylko
 po mTLS z wewnętrznym JWT gateway'a (C2), a do service desku woła z poświadczeniem, które gateway dołącza do
 każdego żądania (C3). Bez poprawnego JWT odpowiada 401, nie ma trybu anonimowego.
 
@@ -9,8 +9,8 @@ Produkt service desku nie jest jeszcze wybrany (D10), więc adapter jest generyc
 parametry, treść notatki i położenie pól w JSON pochodzą z konfiguracji (`servicedesk.api`, sekcja "Adapter
 REST"). Jedyne przyjmowane poświadczenie to `service-account` (klucz konta serwisowego, który broker wydaje gateway'owi;
 `accepted-credential-types: [service-account]`, bez konfiguracji). Service desk nie zna użytkownika, więc dostęp do
-kolejek wynika wyłącznie z paczki polityk: grupy `mcp-servicedesk-queue-<id>` przyznają kolejkę, link wirtualnego
-serwera zawęża ją, a konfiguracja serwera żadnej kolejki nie otwiera (CC-163). Wywołanie z innym typem poświadczenia
+kolejek wynika wyłącznie z paczki polityk: grupy `mcp-servicedesk-queue-<id>` przyznają kolejkę, a konfiguracja
+serwera żadnej kolejki nie otwiera (CC-163). Wywołanie z innym typem poświadczenia
 kończy się `internal_error` przed polityką i systemem.
 
 Logowania użytkowników, decyzji o dostępie do narzędzi i potwierdzeń akcji serwer nie robi: to zadania
@@ -31,7 +31,7 @@ JWKS z kluczy testowych kontraktów i podpisuje wewnętrzne JWT, a `StubBackend`
 
 | Moduł | Co w nim jest | W tym serwerze |
 | --- | --- | --- |
-| `mcp-core` | domena i porty | `Ticket`, `Queue`, `ClassifiedTicket`, `ServicedeskResourceModel`, `TicketSummary`, `TicketSearch`, `NoteReceipt`, `TicketNotFoundException`, `Identifiers` (wzorce z kontraktu), `QueueGrants` (kolejki z grantów i linku), `ServicedeskResourceDescription` (opis dla polityki), porty `ServicedeskUseCase` i `ServicedeskResourcePort` |
+| `mcp-core` | domena i porty | `Ticket`, `Queue`, `ClassifiedTicket`, `ServicedeskResourceModel`, `TicketSummary`, `TicketSearch`, `NoteReceipt`, `TicketNotFoundException`, `Identifiers` (wzorce z kontraktu), `QueueGrants` (kolejki z grantów), `ServicedeskResourceDescription` (opis dla polityki), porty `ServicedeskUseCase` i `ServicedeskResourcePort` |
 | `mcp-application` | przypadki użycia (bez Springa) | `ServicedeskService`: kontrola kolejki przed i po wywołaniu systemu, wyszukiwanie ticketów i kolejek dla resolverów, filtr wyników wyszukiwania |
 | `mcp-integration` | adaptery wyjściowe do systemu | `ServicedeskResourceAdapter` (REST, poświadczenie z C3, timeouty, bez przekierowań), `ServicedeskApi` + `ServicedeskApiProperties` (kształt API z konfiguracji, walidowany przy starcie), `TicketJson` (pola przez JSON pointer), `PlainText` (HTML -> tekst), `ServicedeskQueueResolver` i `ServicedeskTicketResolver` (`ResourceResolver` dla `ServiceDesk::Queue` i `ServiceDesk::Ticket`) |
 | `mcp-tools` | narzędzia MCP, powierzchnia publiczna | `ServicedeskTool` (`search_tickets`, `get_ticket`, `add_note`; limity i wzorce kontraktu w `@ArgumentLimits`), `ServicedeskSearchScope` (zakres wyszukiwania z `QueryScope`), `ServicedeskToolErrors` |
@@ -50,10 +50,10 @@ pochodzą z systemu.
 | `add_note` | Dodaj notatkę do zgłoszenia | `UPDATE` | `update` | `mcp-servicedesk-write` | jw. | `ticketId` (`@ResourceRef` `ServiceDesk::Ticket`), `body` 1-10000 znaków | `{ticketId, noteId}` (`noteId` null, gdy system go nie zwraca) |
 
 Klient widzi nazwy z prefiksem `servicedesk__` (dokłada go gateway, C5). Wzorce identyfikatorów są z
-`mcp-contracts` 4.1.0, czytane z kontraktu (`^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`), te same w `inputSchema`, w walidacji narzędzia i przy wartościach zwracanych przez system.
+`mcp-contracts` 5.1.0, czytane z kontraktu (`^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`), te same w `inputSchema`, w walidacji narzędzia i przy wartościach zwracanych przez system.
 
 Błędy (C10): `not_found_or_denied` z jednym tekstem (tekst startera) dla zgłoszenia lub kolejki nieistniejącej,
-ukrytej przez system (404, 403), spoza przyznanych kolejek, poza linkiem (także kolejka z argumentu `search_tickets`) i
+ukrytej przez system (404, 403), spoza przyznanych kolejek (także kolejka z argumentu `search_tickets`) i
 `restricted`; to samo przy awarii systemu przy odczycie zgłoszenia (500, timeout, przekierowanie, zła odpowiedź), bo konto
 serwisowe nie może po niej poznać, czy zgłoszenie istnieje (starter beta-8; przyczynę zapisują log `resolver_failed_hidden`
 i audyt `upstream_unavailable`, beta-9); `access_denied` bez grupy narzędzia; `credential_required` przy braku poświadczenia i przy 401 z
@@ -90,23 +90,23 @@ Kolejki otwiera tylko paczka polityk (C7): grupy `mcp-servicedesk-queue-<id>` w 
 listy kolejek ani trybu poświadczenia w konfiguracji (zmienne `MCP_SERVICEDESK_ALLOWED_QUEUES`,
 `MCP_SERVICEDESK_CREDENTIAL_MODE` i `MCP_ACCEPTED_CREDENTIAL_TYPES` nie istnieją). Wywołujący bez grupy kolejki dostaje
 `not_found_or_denied` z `get_ticket`, `add_note` i `search_tickets`, a system nie jest wołany. Kolejka w argumencie
-spoza linku wirtualnego serwera to także `not_found_or_denied`, nie `access_denied` (CC-146 c, mapowanie w starterze beta-8). Kolejka jest oceniana na tym, co
+spoza przyznanych to także `not_found_or_denied`, nie `access_denied`. Kolejka jest oceniana na tym, co
 system zwraca w chwili wywołania, nie na tym, co podał model:
 
 - `get_ticket`: resolver zgłoszenia pobiera je, sprawdza, że system zwrócił to samo `id` (inne `id`, np. alias albo
   scalenie, = odmowa) (zgłoszenie bez kolejki = odmowa), potem pyta o
   kolejkę (klasyfikacja); narzędzie czyta ten wynik, bez drugiego wywołania;
-- `get_ticket` i `add_note`: bieżąca kolejka zgłoszenia musi być przyznana grupami wywołującego i dozwolona przez link, inaczej `not_found_or_denied` bez treści i bez zapisu;
+- `get_ticket` i `add_note`: bieżąca kolejka zgłoszenia musi być przyznana grupami wywołującego, inaczej `not_found_or_denied` bez treści i bez zapisu;
 - `add_note`: ten sam resolver przed metodą, potem tylko zapis; przy odmowie nie ma żadnego zapisu;
 - `search_tickets`: kolejka z argumentu jest rozwiązywana (istnienie, klasyfikacja) zanim pójdzie
-  zapytanie i musi być przyznana grupami wywołującego (`QueryScope.grantedIds()`) oraz dozwolona przez link; wywołujący bez żadnej przyznanej kolejki
+  zapytanie i musi być przyznana grupami wywołującego (`QueryScope.grantedIds()`); wywołujący bez żadnej przyznanej kolejki
   (`nothingToQuery()`) dostaje pusty wynik bez wywołania systemu (zwykle wcześniej odmawia starter: `not_found_or_denied`); trafienia sprawdzane po bieżącej kolejce zgłoszenia; z wyników zostają tylko
   zgłoszenia, które system raportuje w tej kolejce (zgłoszenia przeniesione, a nadal w indeksie, i trafienia
   z innych kolejek odpadają).
 
 Zgłoszenie przeniesione do nieprzyznanej kolejki przestaje być dostępne od następnego wywołania. Między
 odczytem a zapisem notatki (dwa wywołania systemu) zostaje okno, w którym zgłoszenie może zmienić kolejkę;
-generyczne REST nie daje warunkowego zapisu (STATUS.md). Ponowny odczyt tuż przed zapisem sprawdza granty, link i politykę
+generyczne REST nie daje warunkowego zapisu (STATUS.md). Ponowny odczyt tuż przed zapisem sprawdza granty i politykę
 (zgłoszenie przeniesione do kolejki `restricted` nie dostaje notatki).
 
 ## Polityka zasobów
@@ -117,7 +117,7 @@ Klasyfikację czyta się z `servicedesk.api.queue.classification-pointer` (napis
 klasyfikacji jest traktowana jako niezastrzeżona**: to decyzja człowieka, zostawiona świadomie. Klasyfikacja, której
 nie da się odczytać (obiekt, liczba, tekst z znakami niewidocznymi, ponad 64 znaki), jest błędem, nie brakiem.
 Wyniki wyszukiwania sprawdza `ResultFilter` po `@ResourceRef` w polu `id` trafienia: trafienie, którego zgłoszenie jest
-teraz w kolejce poza linkiem albo `restricted`, znika; licznika z systemu nie ma. Koszt: jedno `GET` zgłoszenia na
+teraz w kolejce spoza grantów albo `restricted`, znika; licznika z systemu nie ma. Koszt: jedno `GET` zgłoszenia na
 trafienie i jedno `GET` kolejki na kolejkę wyniku (generyczne REST nie ma pobrania zbiorczego).
 
 Paczka polityk (`MCP_POLICY_*`, `GET /mcp-manifest`) jest wymagana poza `dev`.
@@ -125,16 +125,18 @@ Paczka polityk (`MCP_POLICY_*`, `GET /mcp-manifest`) jest wymagana poza `dev`.
 ### Manifest i rejestracja
 
 `accepted-credential-types` to na stałe `[service-account]` (typ domyślny, pierwszy na liście, trafia do
-`context.credentialType` w Cedar). Do rejestru idzie artefakt budowy, nie odpowiedź działającego serwera: właściwość
-`aiwcorpo.mcp.platform.manifest.output-file` (testy ustawiają `target/mcp-manifest.json`; `ManifestTest` sprawdza, że plik
-jest równy `GET /mcp-manifest`). Rejestruje go potok CI certyfikatem `mcp-registry-ci-mcp-servicedesk`; `add_note`
+`context.credentialType` w Cedar). Do rejestru idzie artefakt budowy, nie odpowiedź działającego serwera:
+`mcp-app/target/mcp-manifest.json`. Rejestruje go potok CI certyfikatem `mcp-registry-ci-mcp-servicedesk`; `add_note`
 (`UPDATE`) czeka w gateway'u na zatwierdzenie administratora. Manifest z `environment: dev` publikuje wyłącznie profil
 `devstack` (klucze `dev-` i ta wartość są odrzucane poza trybem dev).
 
-Artefakt powstaje w zwykłym buildzie, także z `-DskipTests`: osobne wykonanie surefire `manifest-artifact` (faza `package`,
-`skipTests=false`, tylko `ManifestArtifactTest`) uruchamia serwer w profilu `dev` i zostawia `mcp-app/target/mcp-manifest.json`.
-CI woła `./mvnw -B package` (albo `verify`) na przeglądanym commicie, wymaga tego pliku i rejestruje go; `-Dmaven.test.skip=true`
-pomija też ten krok i nie wolno go używać. Typy poświadczeń w pliku są te same co w produkcji (stałe w `application.yml`).
+Artefakt powstaje w zwykłym buildzie (`./mvnw package`), także z `-DskipTests`: `ManifestExport` (faza `package`,
+`exec-maven-plugin` w `mcp-app/pom.xml`, `manifest.export.skip=false`) czyta konfigurację produkcyjną (`application.yml` bez
+profilu) i listę narzędzi z `McpToolsConfiguration`, nie startuje serwera (potrzebowałby magazynów TLS, Redisa i paczki polityk)
+i używa tego samego `ManifestGenerator` z tymi samymi kontrolami co serwer przy starcie, więc manifest, który gateway by odrzucił,
+zatrzymuje build. `internalUrl` jest informacyjny (z `MCP_INTERNAL_URL`, a gdy go brak, `https://mcp-servicedesk.internal:8443/mcp`).
+`ManifestTest` pilnuje, że narzędzia tego pliku są identyczne z `tools/list` działającego serwera (hash definicji obejmuje też
+typy poświadczeń, więc w teście porównywane są definicje bez hasha). `ci/run.sh verify` wymaga tego pliku.
 
 ### Metryki
 
@@ -297,9 +299,27 @@ curl -s -o /dev/null -w '%{http_code}\n' "${TLS[@]}" -X POST -H 'Content-Type: a
 Połączenie bez certyfikatu klienta jest zrywane w handshake'u. Pełne wywołanie narzędzia wymaga gateway'a z
 hosta (`mcp-gateway/scripts/run-dev-host.sh`, JWKS na `localhost:18445`) skonfigurowanego na ten serwer.
 
+## CI
+
+Cała logika jest w `ci/run.sh` (`make ci` woła `ci/run.sh verify`); `.gitlab-ci.yml`, `Jenkinsfile` i `.github/workflows/ci.yml`
+to cienkie nakładki, więc to samo działa lokalnie, w obrazie `maven:3.9.12-eclipse-temurin-25` i w każdym z trzech systemów.
+
+| Krok | Co robi |
+| --- | --- |
+| `ci/run.sh verify` (domyślny) | `hygiene`, `mvnw clean verify`, potem kontrola, że uruchomiono co najmniej jeden test (pominięte nie liczą się) i że `mcp-app/target/mcp-manifest.json` istnieje |
+| `ci/run.sh hygiene` | cudzysłowy, spacje i wielokropek spoza ASCII oraz ślady narzędzi w źródłach (perl czyta przez `<<>>`) |
+| `ci/run.sh image` | `docker build -t mcp-server-servicedesk:m5-<sha>` jaru z `verify`; tylko gałąź `main`, wymaga demona Dockera |
+
+Inny argument kończy się kodem 2. Merge request i pull request nie dostają sekretów ani gniazda Dockera: testy nie
+potrzebują kontenerów, a rejestr Maven z artefaktami platformy (`MCP_MAVEN_REPOSITORY_URL`, zwykła zmienna) jest wtedy
+czytany anonimowo (`.ci/settings-anonymous.xml`). Dane dostępu (`MCP_MAVEN_REPOSITORY_USER`, `_PASSWORD`; w GitLabie
+zmienne Protected i Masked, w Jenkinsie poświadczenie `mcp-maven-registry`) widzi tylko gałąź `main`, na której działa też
+krok `image` (runner z gniazdem Dockera). Rejestracja manifestu w gateway'u (`PUT` z certyfikatem
+`mcp-registry-ci-mcp-servicedesk`) jest osobnym krokiem pipeline'u serwera.
+
 ## Testy
 
-`./mvnw verify` (JDK 25, bez Dockera): 118 testów.
+`./mvnw verify` (JDK 25, bez Dockera): 115 testów.
 
 | Klasa | Co sprawdza |
 | --- | --- |
@@ -307,12 +327,12 @@ hosta (`mcp-gateway/scripts/run-dev-host.sh`, JWKS na `localhost:18445`) skonfig
 | `GetTicketToolTest` | poświadczenie z C3 dociera do systemu; HTML i pola dodatkowe nie wychodzą; brak poświadczenia i 401; 404 = 403; złe `ticketId` (także pole nadmiarowe) nie docierają do systemu; poświadczenie i treść błędu systemu nie trafiają do wyniku ani logu; nieczytelna odpowiedź, przekierowanie, timeout i odpowiedź ponad limit; nazwa argumentu z fałszywą linią audytu daje `invalid_argument`, zdarzenie C8 i żadnej sfałszowanej linii w logu |
 | `AddNoteToolTest` | odczyt zgłoszenia, potem POST z notatką wewnętrzną i linią o zleceniodawcy; `UPDATE` bez `readOnlyHint`/`destructiveHint`; brak poświadczenia, 401 na odczycie i na zapisie; 404, 403 i 403 na zapisie dają ten sam błąd; złe argumenty |
 | `QueueBoundaryTest` | konto serwisowe: zgłoszenie z innej kolejki, alias, bez kolejki, 403 i nieistniejące dają bajtowo ten sam błąd w `get_ticket` i `add_note`, bez żadnego zapisu; zgłoszenie przeniesione z dozwolonej kolejki przestaje być dostępne (także w wyszukiwaniu z nieaktualnym indeksem), przeniesione do dozwolonej jest dostępne; wyszukiwanie w niedozwolonej kolejce (także `it` zamiast `IT`) nie dociera do systemu; poświadczenie użytkownika jest odrzucane (`internal_error`) przed narzędziem, system nie jest wołany |
-| `ResourcePolicyTest` | zgłoszenie w kolejce `restricted`, przeniesione do niej i z kolejki spoza zakresu konta serwisowego = `not_found_or_denied` bajtowo jak nieistniejące (też `add_note`, bez zapisu); `access_denied` bez grupy; link zawęża zgłoszenia i wyniki (`STALE-1`); wyszukiwanie konta serwisowego tylko w kolejkach przyznanych grupami; kolejka bez klasyfikacji nie jest zastrzeżona; awaria systemu wygląda jak brak zgłoszenia, a przyczyna jest w logu i audycie; liczba wywołań systemu nie zależy od istnienia zgłoszenia spoza grantów |
-| `ManifestTest` | `GET /mcp-manifest` przechodzi reguły `mcp-manifest`, definicje równe `tools/list` (`definitionHash`), ryzyko, `resourceRefs`, polskie tytuły, 401 bez JWT serwisowego |
+| `ResourcePolicyTest` | zgłoszenie w kolejce `restricted`, przeniesione do niej i z kolejki spoza zakresu konta serwisowego = `not_found_or_denied` bajtowo jak nieistniejące (też `add_note`, bez zapisu); `access_denied` bez grupy; wyszukiwanie konta serwisowego tylko w kolejkach przyznanych grupami; kolejka bez klasyfikacji nie jest zastrzeżona; awaria systemu wygląda jak brak zgłoszenia, a przyczyna jest w logu i audycie; liczba wywołań systemu nie zależy od istnienia zgłoszenia spoza grantów |
+| `ManifestTest` | `GET /mcp-manifest` przechodzi reguły `mcp-manifest`, definicje równe `tools/list` (`definitionHash`), ryzyko, `resourceRefs`, polskie tytuły, 401 bez JWT serwisowego; manifest z `ManifestExport` (plik z budowy) przechodzi reguły i ma te same narzędzia co `tools/list` |
 | `ProductionConfigurationTest` | konfiguracja bazowa: `client-auth: need`, paczka polityk i `state-dir` wymagane, bez kluczy testowych; backend `http` poza `dev` odrzucony (chyba że jawnie dopuszczony); `dev` na 127.0.0.1 |
 | `DevProfileLoopbackTest` | `dev` z adresem innym niż pętla zwrotna nie wstaje |
 | `ToolDefinitionsTest` | dokładnie trzy narzędzia z ryzykiem; `inputSchema` zamknięte (`additionalProperties: false`), wzorce z kontraktu, limity długości; opisy bez instrukcji |
-| `GatewayOnlyAccessTest` | bez JWT 401 (`tools/call`, `ping`, `initialize`), JWT innego serwera, innego narzędzia, wariant serwisowy i przeterminowany -> 401; bez JWT tylko health |
+| `GatewayOnlyAccessTest` | bez JWT 401 (`tools/call`, `ping`, `initialize`), JWT innego serwera, innego narzędzia, wariant serwisowy i przeterminowany -> 401; token z claimem `vs` albo `vsc` (usunięte w kontraktach 5.x) -> 401; bez JWT tylko health |
 | `ServicedeskServiceTest` | use case bez Springa: alias, kolejka z trafienia, limit, notatka po ponownym odczycie |
 | `ServicedeskToolTest` | walidacja tekstu w narzędziu bez walidacji schematu przed nią (`InvalidToolArgumentException`) |
 | `ServicedeskApiTest`, `TicketJsonTest`, `PlainTextTest` | kodowanie URI, treść notatki, walidacja konfiguracji (także nakładające się pola stałe notatki), dwa różne kształty API, HTML -> tekst (zakodowany tag nie wraca jako znacznik) |

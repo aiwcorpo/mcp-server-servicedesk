@@ -57,8 +57,8 @@ public class ServicedeskTool {
     }
 
     /**
-     * The queue is a {@code @ResourceRef}: a queue that is missing, hidden, restricted, outside the link of the
-     * virtual server gives the one {@code not_found_or_denied} before the service desk is searched, and a caller granted
+     * The queue is a {@code @ResourceRef}: a queue that is missing, hidden, restricted or not granted
+     * gives the one {@code not_found_or_denied} before the service desk is searched, and a caller granted
      * no queue gets an empty result without a call to it. The hits are judged again one by one by their {@code @ResourceRef} component.
      */
     @Tool(name = "search_tickets", description = "Searches the tickets of one service desk queue for a text. "
@@ -122,7 +122,7 @@ public class ServicedeskTool {
 
     /**
      * The service account sees every queue, so the queue the service desk reports for the ticket now must be one the
-     * caller's groups grant (and the link allows): CC-076, CC-163, no scope means no access. Same answer as a missing
+     * caller's groups grant: CC-076, CC-163, no scope means no access. Same answer as a missing
      * ticket, raised before anything is written or returned.
      */
     private void requireInScope(Ticket ticket) {
@@ -134,7 +134,7 @@ public class ServicedeskTool {
 
     /**
      * The ticket as the service desk describes it right now, judged again before a note is written and for every search
-     * hit: the grants and the link, and the policy itself (a ticket moved into a restricted queue is refused).
+     * hit: the grants and the policy itself (a ticket moved into a restricted queue is refused).
      */
     private boolean stillAllowed(QueryScope scope, ClassifiedTicket current) {
         return QueueGrants.permits(scope, current.ticket().queue()) && policy.allows(ServicedeskResourceDescription.of(current));

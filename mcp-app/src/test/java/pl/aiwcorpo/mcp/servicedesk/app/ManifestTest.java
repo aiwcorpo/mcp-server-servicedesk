@@ -67,9 +67,25 @@ class ManifestTest extends ServerTestSupport {
         return tools;
     }
 
+    private static JsonNode withoutHash(JsonNode tools) {
+        JsonNode copy = tools.deepCopy();
+        copy.forEach(tool -> ((tools.jackson.databind.node.ObjectNode) tool).remove("definitionHash"));
+        return copy;
+    }
+
     @Test
-    void theBuildArtifactIsTheManifestTheServerPublishes() throws Exception {
-        assertThat(JSON.readTree(java.nio.file.Files.readString(MANIFEST_FILE))).isEqualTo(manifest());
+    void theBuildManifestHasTheToolsTheServerPublishes() throws Exception {
+        String built = ManifestExport.manifest();
+        JsonNode exported = JSON.readTree(built);
+        JsonNode served = manifest();
+
+        assertThat(ManifestRules.violations(built)).isEmpty();
+        // definitionHash is left out: it covers the accepted credential types too, which tests set explicitly.
+        assertThat(withoutHash(exported.get("tools"))).as("same definitions as tools/list").isEqualTo(withoutHash(served.get("tools")));
+        assertThat(exported.get("resourceTypes")).isEqualTo(served.get("resourceTypes"));
+        assertThat(exported.get("serverId").asString()).isEqualTo(SERVER_ID);
+        assertThat(exported.at("/credential/acceptedTypes").toString()).isEqualTo("[\"service-account\"]");
+        assertThat(exported.has("environment")).isFalse();
     }
 
     @Test

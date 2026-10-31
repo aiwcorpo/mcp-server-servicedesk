@@ -134,40 +134,6 @@ class ResourcePolicyTest extends ServerTestSupport {
     }
 
     @Test
-    void aLinkThatNarrowsToOneQueueHidesTheTicketsAndQueuesOfTheOthers() {
-        McpSchema.CallToolResult outsideLink;
-        try (McpSyncClient client = clientAs(
-                user -> user.virtualServer("it-only", Map.of("servicedeskQueues", List.of("IT"))), SERVICE_KEY,
-                BackendCredential.Type.SERVICE_ACCOUNT)) {
-            assertThat(call(client, "get_ticket", Map.of("ticketId", "IT-1")).isError()).isFalse();
-            assertNotFoundOrDenied(call(client, "get_ticket", Map.of("ticketId", "OPS-5")));
-            outsideLink = call(client, "search_tickets", Map.of("queue", "OPS", "text", "x"));
-            assertNotFoundOrDenied(outsideLink);
-            assertNotFoundOrDenied(call(client, "add_note", Map.of("ticketId", "OPS-5", "body", "x")));
-        }
-        try (McpSyncClient client = serviceAccountClient()) {
-            McpSchema.CallToolResult grantedButMissing = call(client, "search_tickets", Map.of("queue", "GONE", "text", "x"));
-            assertThat(text(outsideLink)).as("CC-146 c: outside the link looks like a granted queue the service desk does not have")
-                    .isEqualTo(text(grantedButMissing));
-        }
-        assertThat(BACKEND.noteBodies()).isEmpty();
-    }
-
-    @Test
-    void aSearchThroughALinkDoesNotReturnTicketsOutsideIt() {
-        try (McpSyncClient client = clientAs(
-                user -> user.virtualServer("it-only", Map.of("servicedeskQueues", List.of("IT"))), SERVICE_KEY,
-                BackendCredential.Type.SERVICE_ACCOUNT)) {
-            McpSchema.CallToolResult result = call(client, "search_tickets", Map.of("queue", "IT", "text", "printer"));
-
-            assertThat(result.isError()).isFalse();
-            assertThat(text(result)).contains("\"id\":\"IT-1\"", "\"id\":\"IT-2\"")
-                    .as("STALE-1 is in OPS, outside the link, although the index lists it under IT")
-                    .doesNotContain("STALE-1");
-        }
-    }
-
-    @Test
     void aQueueTheCallerIsNotGrantedAnswersLikeAMissingQueueAndIsNotSearched() {
         try (McpSyncClient client = clientAs(
                 user -> user.groups(List.of("mcp-servicedesk-read", "mcp-servicedesk-queue-IT")), SERVICE_KEY,

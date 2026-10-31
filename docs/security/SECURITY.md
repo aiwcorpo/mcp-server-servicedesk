@@ -9,7 +9,7 @@ Niezmienniki platformy (`mcp-platform-plan/00-overview.md`) i to, gdzie serwer j
 | Fail-closed | brak JWKS, Redisa, konfiguracji albo poświadczenia -> 401/503/`credential_required`/brak startu, nigdy przepuszczenie; starter odrzuca relaksacje `dev` w innych profilach |
 | Sekrety nigdy w logach, audycie, wynikach i błędach | nagłówki poświadczeń ukryte po odczycie, `BackendCredential.toString()` bez wartości, redakcja komunikatów w starterze; adapter zamienia błędy i nieczytelne odpowiedzi systemu na wyjątki bez treści; system tylko po `https`. Testy: `theCredentialAndTheBackendErrorNeverAppearInTheResultOrTheLog`, `anUnreadableBodyStaysOutOfTheResultAndTheLog`, `outsideDevTheBackendMustBeHttps` |
 | "Nie istnieje" i "brak dostępu" -> `not_found_or_denied` | 404 i 403 systemu, zgłoszenie lub kolejka spoza przyznanych, alias i zgłoszenie bez kolejki dają ten sam błąd i tekst (porównanie bajtowe). Testy: `QueueBoundaryTest`, `missingAndForbiddenTicketsLookTheSame` |
-| Konto serwisowe: kolejki tylko z paczki polityk | jedyny typ poświadczenia to `service-account`; kolejkę otwiera wyłącznie grupa `mcp-servicedesk-queue-<id>` w paczce (CC-163), konfiguracja serwera nie otwiera żadnej; `ServiceDesk::Ticket` bez zakresu kolejki i kolejka spoza linku dają `not_found_or_denied` przed resolverem i systemem. Testy: `QueueBoundaryTest`, `ResourcePolicyTest`, `ProductionConfigurationTest` |
+| Konto serwisowe: kolejki tylko z paczki polityk | jedyny typ poświadczenia to `service-account`; kolejkę otwiera wyłącznie grupa `mcp-servicedesk-queue-<id>` w paczce (CC-163), konfiguracja serwera nie otwiera żadnej; `ServiceDesk::Ticket` bez zakresu kolejki i kolejka spoza grantów dają `not_found_or_denied` przed resolverem i systemem. Testy: `QueueBoundaryTest`, `ResourcePolicyTest`, `ProductionConfigurationTest` |
 | Audyt z `requestId` | jedno zdarzenie C8 `tool_call` na wywołanie (logger `pl.aiwcorpo.mcp.audit`, stdout, czysta linia JSON), `requestId` z JWT |
 
 ## Zasady dla kodu
@@ -30,8 +30,8 @@ Niezmienniki platformy (`mcp-platform-plan/00-overview.md`) i to, gdzie serwer j
 - Profil `dev` (klucze testowe, bez mTLS) jest w jarze, ale wstaje tylko na adresie pętli zwrotnej (starter,
   test `DevProfileLoopbackTest`). Serwer, do którego łączy się gateway, działa wyłącznie w konfiguracji bazowej.
 - Serwer nie trzyma poświadczeń. Konto serwisowe service desku (`service-account`, D10) przychodzi przez C3 jak
-  każde inne. To jedyny typ, który serwer przyjmuje, więc granicą autoryzacji są granty kolejek z paczki polityk i
-  link wirtualnego serwera (`QueueGrants`, README "Granica kolejek"); konfiguracja serwera nie otwiera żadnej kolejki.
+  każde inne. To jedyny typ, który serwer przyjmuje, więc granicą autoryzacji są granty kolejek z paczki polityk
+  (`QueueGrants`, README "Granica kolejek"); konfiguracja serwera nie otwiera żadnej kolejki.
   Zgłoszenie spoza grantów odpada przed odczytem jego kolejki, żeby liczba wywołań nie zdradzała, że istnieje.
 - Ścieżki API pochodzą z konfiguracji walidowanej przy starcie; argumenty idą tylko jako zmienne URI kodowane
   ściśle albo wartości JSON. Treść notatki dostaje stałe pola z konfiguracji (np. widoczność wewnętrzna).

@@ -36,7 +36,7 @@ class ServicedeskTicketResolver implements ResourceResolver<ClassifiedTicket> {
     }
 
     /**
-     * A ticket in a queue the caller is not granted (or the link excludes) is dropped before its queue is read, so the
+     * A ticket in a queue the caller is not granted is dropped before its queue is read, so the
      * calls to the service desk are the same for such a ticket and for one that does not exist.
      */
     private Predicate<String> grantedQueues() {

@@ -34,13 +34,13 @@ public interface ServicedeskUseCase {
 
     /**
      * @param currentlyAllowed judges a hit as the service desk describes it now; a hit it refuses is left out (the
-     *                        caller's grants, link and policy, which the index may lag behind)
+     *                        caller's grants and policy, which the index may lag behind)
      */
     TicketSearch searchTickets(String queue, String text, Predicate<ClassifiedTicket> currentlyAllowed);
 
     /**
      * Reads the ticket again just before writing and refuses when the ticket is no longer one {@code currentlyAllowed}
-     * accepts (queue grants, link, restricted classification); a move between that read and the write stays possible (no conditional write in generic REST).
+     * accepts (queue grants, restricted classification); a move between that read and the write stays possible (no conditional write in generic REST).
      */
     NoteReceipt addNote(String ticketId, String body, Predicate<ClassifiedTicket> currentlyAllowed);
 }

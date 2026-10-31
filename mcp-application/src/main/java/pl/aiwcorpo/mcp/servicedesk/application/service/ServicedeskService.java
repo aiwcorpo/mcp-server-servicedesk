@@ -22,7 +22,7 @@ import pl.aiwcorpo.mcp.servicedesk.core.port.out.ServicedeskResourcePort;
  * Use cases of the server. A plain class: mcp-app makes it a bean, so this module stays free of Spring.
  *
  * <p>The service desk answers for the platform's service account, not for the user, so what the caller may see is
- * decided outside this class: by the grants and the link of the policy bundle, which the resolvers' callers and the
+ * decided outside this class: by the grants of the policy bundle, which the resolvers' callers and the
  * tools apply (the server's configuration opens no queue). Queue checks here run on the queue the service desk reports
  * for the ticket at the time of the call (a ticket moved to another queue is judged by its new queue), never on what
  * the caller claims. The lookups of a queue and a ticket are what the resolvers of the policy call, so a ticket in a

@@ -14,6 +14,9 @@
     </parent>
     <artifactId>mcp-app</artifactId>
     <name>mcp-servicedesk :: App (bootstrap)</name>
+    <properties>
+        <manifest.export.skip>false</manifest.export.skip>
+    </properties>
     <dependencies>
         <dependency><groupId>${project.groupId}</groupId><artifactId>mcp-tools</artifactId><version>${project.version}</version></dependency>
         <dependency><groupId>${project.groupId}</groupId><artifactId>mcp-integration</artifactId><version>${project.version}</version></dependency>
@@ -34,28 +37,30 @@
     <build>
         <finalName>mcp-servicedesk</finalName>
         <plugins>
-            <!-- Boots the server once more in the package phase, even with -DskipTests, to leave target/mcp-manifest.json
-                 for the CI registration step (README, "Manifest i rejestracja"). -Dmaven.test.skip=true skips it too. -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-surefire-plugin</artifactId>
-                <executions>
-                    <execution>
-                        <id>manifest-artifact</id>
-                        <phase>package</phase>
-                        <goals>
-                            <goal>test</goal>
-                        </goals>
-                        <configuration>
-                            <skipTests>false</skipTests>
-                            <test>ManifestArtifactTest</test>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+            <!--
+              The manifest to register at the gateway: built from the reviewed commit and the production configuration,
+              in the ordinary build (also with -DskipTests), as target/mcp-manifest.json.
+            -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>export-manifest</id>
+                        <phase>package</phase>
+                        <goals><goal>java</goal></goals>
+                        <configuration>
+                            <skip>${manifest.export.skip}</skip>
+                            <mainClass>pl.aiwcorpo.mcp.servicedesk.app.ManifestExport</mainClass>
+                            <arguments><argument>${project.build.directory}/mcp-manifest.json</argument></arguments>
+                            <classpathScope>runtime</classpathScope>
+                        </configuration>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
     </build>

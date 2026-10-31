@@ -36,8 +36,6 @@ abstract class ServerTestSupport {
     static final String SERVICE_KEY = "ApiKey sd-service-key-7f3a91";
     static final String CALLER = "jkowalski";
 
-    static final java.nio.file.Path MANIFEST_FILE = java.nio.file.Path.of("target", "mcp-manifest.json");
-
     static final String SERVER_ID = "mcp-servicedesk";
     static final String SYSTEM = "servicedesk";
     static final String ENDPOINT = "/mcp";
@@ -64,9 +62,6 @@ abstract class ServerTestSupport {
         // TestGateway assumes the types of a user; this server accepts the service account only, as the gateway checks
         // at registration (credential_type_mismatch).
         registry.add("aiwcorpo.mcp.platform.manifest.accepted-credential-types", () -> "service-account");
-        // The artifact the build hands to the registration step: the manifest of the commit under review, not an answer
-        // of a running server (CC-133, CC-140).
-        registry.add("aiwcorpo.mcp.platform.manifest.output-file", () -> MANIFEST_FILE.toString());
         registry.add("servicedesk.backend.base-url", BACKEND::baseUrl);
         // Short limits so the timeout and size tests run quickly; StubBackend's slow and huge tickets exceed them.
         registry.add("servicedesk.backend.read-timeout", () -> "1s");
@@ -93,7 +88,7 @@ abstract class ServerTestSupport {
         return clientAs(user -> user.username(CALLER), credential, type);
     }
 
-    /** Same, with the JWT claims of the caller set by {@code user} (a call through a link carries {@code vs}). */
+    /** Same, with the JWT claims of the caller set by {@code user}. */
     McpSyncClient clientAs(java.util.function.Consumer<TestGateway.Token> user, String credential,
             BackendCredential.Type type) {
         McpSyncHttpClientRequestCustomizer gateway = GATEWAY.asGateway(token -> {

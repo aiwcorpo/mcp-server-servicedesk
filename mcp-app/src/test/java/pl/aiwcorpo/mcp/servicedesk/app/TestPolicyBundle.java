@@ -19,7 +19,7 @@ import pl.aiwcorpo.mcp.platform.test.PolicyRepository;
 
 /**
  * The example policies of mcp-contracts (calls, reads, updates in scope, the service account rules of
- * {@code credential-type.cedar}, restricted data, links; unchanged) plus one group per test queue in the scope mapping, so the
+ * {@code credential-type.cedar}, restricted data; unchanged) plus one group per test queue in the scope mapping, so the
  * grants of a caller can be told apart. Signed with the published test key, for tests only.
  */
 final class TestPolicyBundle {
@@ -29,7 +29,7 @@ final class TestPolicyBundle {
 
     private static final String EXAMPLES = "mcp-contracts/cedar/examples/";
     private static final List<String> EXAMPLE_POLICIES = List.of("call-tool.cedar", "credential-type.cedar",
-            "forbid-restricted.cedar", "read.cedar", "step-up.cedar", "update.cedar", "virtual-server.cedar");
+            "forbid-restricted.cedar", "read.cedar", "step-up.cedar", "update.cedar");
 
     private TestPolicyBundle() {
     }

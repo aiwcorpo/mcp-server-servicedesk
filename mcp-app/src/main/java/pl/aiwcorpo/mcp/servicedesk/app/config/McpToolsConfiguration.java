@@ -16,7 +16,7 @@ import pl.aiwcorpo.mcp.servicedesk.tools.ServicedeskTool;
 public class McpToolsConfiguration {
 
     @Bean
-    ToolCallbackProvider mcpTools(ServicedeskTool servicedeskTool) {
+    public ToolCallbackProvider mcpTools(ServicedeskTool servicedeskTool) {
         return SchemaLimitedToolCallbacks.of(servicedeskTool);
     }
 }

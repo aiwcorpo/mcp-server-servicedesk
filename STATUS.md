@@ -284,3 +284,22 @@ Weryfikacja: 115 testów, 0 błędów.
 | SD-L5 | wykonanie surefire `manifest-artifact` w fazie `package` (`skipTests=false`, tylko `ManifestArtifactTest`): `./mvnw package -DskipTests` zostawia `mcp-app/target/mcp-manifest.json` (sprawdzone na czystym `target`); README, "Manifest i rejestracja" |
 
 Weryfikacja: `./mvnw -B clean verify` -> 118 testów w modułach plus wykonanie `manifest-artifact`, 0 błędów.
+
+## M5: starter 3.0.0-beta-10, kontrakty 5.1.0 (2026-10-31)
+
+- Wersja `mcp-platform.version` 3.0.0-beta-10 (BOM przypina kontrakty 5.1.0); README poprawione (wersje, brak linku w opisie granicy kolejek).
+- Usunięte: `linkIds()` w `QueueGrants` (kolejka jest obsługiwana tylko wtedy, gdy grupy wywołującego ją przyznają; `nothingToQuery()` i `grantedIds()`
+  bez zmian, zakres nie został poszerzony), testy zawężenia linkiem w `ResourcePolicyTest`, `GatewayLinkClaimsTest`, `virtual-server.cedar`
+  z `TestPolicyBundle`, wzmianki o linku w javadocu i dokumentach. Serwer nie używał `LINK_KEY`, `linkType()`, `CallerContext.virtualServer*`,
+  `QueryConstraint` z trzema argumentami, `RecordingAuthorizer` ani `LINK_NARROWING_PREFIX`; audyt serwera nie miał pola `virtualServer` ani alertów
+  na `link_scope`.
+- `GatewayOnlyAccessTest.aTokenWithTheClaimsOfTheRemovedVirtualServersIsRejected`: `extraClaim("vs", ...)` i `extraClaim("vsc", ...)` -> 401, system nie jest wołany.
+- Manifest: `ManifestExport` w fazie `package` (`exec-maven-plugin`, `manifest.export.skip=false`) zamiast wykonania surefire z `ManifestArtifactTest`;
+  `mcp-app/target/mcp-manifest.json` powstaje z konfiguracji produkcyjnej także z `-DskipTests`; `ManifestTest` porównuje go z `tools/list`.
+- CI: `ci/run.sh` (verify, hygiene, image), `Makefile`, `.gitlab-ci.yml`, `Jenkinsfile`, `.github/workflows/ci.yml`, `.ci/settings*.xml` z template'u 444f826.
+  Krok `image` buduje `mcp-server-servicedesk:m5-<sha>`. MR/PR bez sekretów i bez gniazda Dockera, nieznany krok = 2, 0 uruchomionych testów = błąd.
+- A10-M1: `DevProfileLoopbackTest` używa `DevProfileGuardAssertions` (reguła i obecność guardów niezależnie od hosta); ten sam test i `ManifestTest`,
+  `GatewayOnlyAccessTest` przechodzą z `INVOCATION_ID` i `KUBERNETES_SERVICE_HOST/PORT` w środowisku. Żadna bramka bezpieczeństwa nie została wycięta.
+- Dowód lokalny: `ci/run.sh verify` -> 115 przypadków uruchomionych, 0 pominiętych, 0 błędów.
+
+M5: kod gotowy (2026-10-31)
