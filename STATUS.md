@@ -303,3 +303,7 @@ Weryfikacja: `./mvnw -B clean verify` -> 118 testów w modułach plus wykonanie 
 - Dowód lokalny: `ci/run.sh verify` -> 115 przypadków uruchomionych, 0 pominiętych, 0 błędów.
 
 M5: kod gotowy (2026-10-31)
+
+Poprawki CI po przeglądzie szablonu 3df797e (2026-10-31): hygiene fail-closed, liczniki testów per moduł (CI_TEST_MODULES, CI_APP_MIN_TESTS),
+tag obrazu `mcp-server-servicedesk:m5-<sha7>`, `ManifestTest` porównuje hash (gdy listy typów równe) i wersję z pom, test `vs`/`vsc` ma kontrolę pozytywną (powód w logu: invalid_claims).
+- Dowód: `ci/run.sh verify` 115 przypadków uruchomionych, `ci/run.sh bogus` daje 2, obraz `mcp-server-servicedesk:m5-a8b1af2` zbudowany z `ci/run.sh image`.
