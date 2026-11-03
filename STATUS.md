@@ -307,3 +307,19 @@ M5: kod gotowy (2026-10-31)
 Poprawki CI po przeglądzie szablonu 3df797e (2026-10-31): hygiene fail-closed, liczniki testów per moduł (CI_TEST_MODULES, CI_APP_MIN_TESTS),
 tag obrazu `mcp-server-servicedesk:m5-<sha7>`, `ManifestTest` porównuje hash (gdy listy typów równe) i wersję z pom, test `vs`/`vsc` ma kontrolę pozytywną (powód w logu: invalid_claims).
 - Dowód: `ci/run.sh verify` 115 przypadków uruchomionych, `ci/run.sh bogus` daje 2, obraz `mcp-server-servicedesk:m5-a8b1af2` zbudowany z `ci/run.sh image`.
+
+## M6: starter 3.0.0-beta-14, kontrakty 6.3.2 i porządki do wydania (2026-11-03)
+
+- `mcp-platform.version` 3.0.0-beta-14 (BOM przypina kontrakty 6.3.2). Bez zmian w kodzie serwera: sekcja migracji "Z beta-13 na beta-14"
+  (CQL `type = page`, tryb odbiorcy JWT sidecara) nie dotyczy serwera natywnego bez CQL; hashe definicji narzędzi bez zmian,
+  `ManifestTest` zielony. Starsze sekcje (beta-11, beta-12, beta-13): serwer nie używa kursorów, sondy wersji ani `UPDATE` z powtórzeniem
+  poza `add_note`, którego brak powtarzalności opisuje README ("Codzienna obsługa").
+- Testy: `ci/run.sh verify` 115 testów (core 0, application 11, integration 29, tools 2, app 73), 0 błędów; dolna granica `CI_APP_MIN_TESTS` 70.
+- Porządki: `LICENSE` (Apache-2.0), `NOTICE` także w `META-INF` każdego jara (`maven-resources-plugin`, `license-files`), licencja i `scm` w pom,
+  `SECURITY.md`, `CONTRIBUTING.md`, `CHANGELOG.md`, README (instalacja, codzienna obsługa, `mcp-docs`, bez ścieżek z katalogu użytkownika),
+  `ci/run.sh` szuka JDK 25 bez stałych ścieżek (tylko w kroku `verify`), przedrostek obrazu `m6`.
+- CI: akcje GitHub przypięte do SHA z komentarzem wersji, obrazy `maven` i `docker` po digeście (GitLab, Jenkins, GitHub), uprawnienia per job,
+  odczyt pakietów przez `GITHUB_TOKEN` z `packages: read`. `release.yml`: `verify` (tylko odczyt) buduje, testuje, robi SBOM i `docker save`;
+  `publish` (`packages: write`) i `release` (`contents: write`) nie mają checkoutu ani narzędzi budowy, token tylko w env kroku.
+  Workflow nie był uruchomiony (brak repozytorium zdalnego); SHA akcji i digesty skopiowane z `mcp-server-confluence` i `mcp-starter-lib`.
+- Fałszywe sekrety w testach (`ApiKey sd-service-key-...`, `stolen-service-key`) nie mają kształtu prawdziwych tokenów.
