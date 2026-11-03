@@ -1,7 +1,8 @@
 # mcp-servicedesk: serwer MCP platformy
 
-Serwer MCP dla service desku, zbudowany na `mcp-platform-starter` 3.0.0-beta-10 (Java 25, Spring Boot 4.1.0,
-Spring AI 2.0.0, kontrakty `mcp-contracts` 5.1.0). Stoi wyłącznie za gateway'em platformy: przyjmuje ruch tylko
+Serwer MCP dla service desku, zbudowany na `mcp-platform-starter` 3.0.0-beta-14 (Java 25, Spring Boot 4.1.0,
+Spring AI 2.0.0, kontrakty `mcp-contracts` 6.3.2). Jest produktem do wdrożenia obok gateway'a platformy MCP, nie
+biblioteką. Stoi wyłącznie za gateway'em platformy: przyjmuje ruch tylko
 po mTLS z wewnętrznym JWT gateway'a (C2), a do service desku woła z poświadczeniem, które gateway dołącza do
 każdego żądania (C3). Bez poprawnego JWT odpowiada 401, nie ma trybu anonimowego.
 
@@ -15,17 +16,47 @@ kończy się `internal_error` przed polityką i systemem.
 
 Logowania użytkowników, decyzji o dostępie do narzędzi i potwierdzeń akcji serwer nie robi: to zadania
 gateway'a. Serwer odpowiada za narzędzia, adapter, granicę kolejek, poprawne błędy (C10) i audyt (C8), który
-dokłada starter.
+dokłada starter. Dokumentacja platformy: repozytorium `mcp-docs`.
 
 ## Szybki start
 
 ```bash
-export JAVA_HOME=/opt/homebrew/Cellar/openjdk@25/25.0.4.1/libexec/openjdk.jdk/Contents/Home
 ./mvnw verify                 # build, testy przez TestGateway i atrapę backendu; jar: mcp-app/target/mcp-servicedesk.jar
 ```
 
+Potrzebny jest JDK 25 (`ci/run.sh verify` sam go szuka; `./mvnw` wymaga `JAVA_HOME` ustawionego na JDK 25). Linux i macOS z
+bash 3.2 lub nowszym; Windows tylko przez WSL2.
+
 Testy nie potrzebują Dockera ani środowiska `mcp-platform-dev`: `TestGateway` z `mcp-platform-test` wystawia
 JWKS z kluczy testowych kontraktów i podpisuje wewnętrzne JWT, a `StubBackend` (test) udaje API systemu.
+
+## Instalacja
+
+Wymagania, układ plików, kroki dla VM z systemd i typowe problemy: `docs/operations/deployment-vm-systemd.md`
+(`deploy/scripts/install.sh`, `update.sh`, `healthcheck.sh`, szablon środowiska `deploy/systemd/mcp-servicedesk.env.template`).
+Wariant kontenerowy: `Dockerfile` (po `./mvnw verify`; obraz `eclipse-temurin:25-jre`, glibc, bo `cedar-java` ładuje bibliotekę
+natywną, użytkownik `mcp`, port 8443, mTLS) i `ci/run.sh image`, który buduje `mcp-server-servicedesk:m6-<sha7>`; kontener dostaje
+tę samą konfigurację ze zmiennych środowiska i plików TLS montowanych tylko do odczytu.
+
+Artefakty platformy (`mcp-platform-starter`, `mcp-contracts`) są w GitHub Packages organizacji `aiwcorpo`. Przy budowie ze
+źródeł wystarczy `~/.m2` z tymi artefaktami albo rejestr w `MCP_MAVEN_REPOSITORY_URL` (+ `_USER`, `_PASSWORD`); układ
+`settings.xml` z dwoma serwerami `github-starter` i `github-contracts` opisuje README `mcp-starter-lib`, rozdział "Instalacja".
+Kształt API konkretnego produktu service desku podaje się plikiem konfiguracji (rozdział "Adapter REST"); bez niego serwer
+używa układu referencyjnego, na którym działają testy.
+
+## Codzienna obsługa
+
+- Zdrowie: `deploy/scripts/healthcheck.sh` (wymaga certyfikatu klienta, bo mTLS obejmuje też health).
+- Aktualizacja: `deploy/scripts/update.sh <nowy.jar>`, wycofanie: przywrócić kopię `.bak`. Po aktualizacji zarejestrować w
+  gateway'u świeży manifest z `mcp-app/target/mcp-manifest.json`.
+- Kolejki: dostęp do nich przyznaje paczka polityk (grupy `mcp-servicedesk-queue-<id>`), nie konfiguracja serwera; nowa kolejka
+  to zmiana polityk, nie wdrożenie.
+- Klucz konta serwisowego service desku wydaje broker gateway'owi; po stronie serwera nie ma go w żadnym pliku. 401 z systemu
+  użytkownik widzi jako `credential_required`, obrót klucza robi się w brokerze.
+- Audyt C8 idzie na stdout (journald), logger `pl.aiwcorpo.mcp.audit`; przyczynę ukrytej awarii odczytu zgłoszenia
+  zapisują log `resolver_failed_hidden` i audyt `upstream_unavailable`.
+- `add_note` (`UPDATE`) jest dostarczane co najmniej raz: po `502` z balancera klient może powtórzyć wywołanie, a system
+  dostanie drugą notatkę. Generyczne REST nie ma klucza idempotencji ani warunkowego zapisu, więc serwer tego nie maskuje.
 
 ## Moduły i miejsce każdej rzeczy
 
@@ -234,7 +265,7 @@ Poza profilem `dev` serwer nie wstaje bez `MCP_GATEWAY_JWKS_URI` (tylko `https`)
 `SystemId` kontraktów; `servicedesk` jest.
 
 `java` w `PATH` może być starsza niż 25 (wtedy `UnsupportedClassVersionError`), dlatego poniżej zawsze
-`$JAVA_HOME/bin/java`.
+`$JAVA_HOME/bin/java`, z `JAVA_HOME` ustawionym na JDK 25.
 
 ## Uruchomienie lokalne bez środowiska
 
@@ -243,7 +274,6 @@ certyfikatów i sekretów. Gateway'a nie ma, więc każde żądanie z JWT kończ
 służy do sprawdzenia, że serwer wstaje i odrzuca ruch bez JWT. Narzędzia sprawdzają testy (`./mvnw verify`).
 
 ```bash
-export JAVA_HOME=/opt/homebrew/Cellar/openjdk@25/25.0.4.1/libexec/openjdk.jdk/Contents/Home
 ./mvnw -B verify
 SPRING_PROFILES_ACTIVE=dev MCP_PORT=18530 "$JAVA_HOME/bin/java" -jar mcp-app/target/mcp-servicedesk.jar
 # w drugim terminalu:
@@ -277,8 +307,7 @@ Magazyny PKCS12 i Redis są chronione hasłami z `$MCP_PLATFORM_DEV/.secrets/dev
 ich odczytu:
 
 ```bash
-export JAVA_HOME=/opt/homebrew/Cellar/openjdk@25/25.0.4.1/libexec/openjdk.jdk/Contents/Home
-export MCP_PLATFORM_DEV=<workspace>/mcp-platform-dev           # ścieżka bezwzględna
+export MCP_PLATFORM_DEV=/path/to/mcp-platform-dev           # katalog repozytorium, ścieżka bezwzględna
 export MCP_TLS_STORE_PASSWORD="$(grep '^TLS_STORE_PASSWORD=' "$MCP_PLATFORM_DEV/.secrets/dev.env" | cut -d= -f2-)"
 export MCP_REDIS_PASSWORD="$(grep '^REDIS_MCP_SERVICEDESK_PASSWORD=' "$MCP_PLATFORM_DEV/.secrets/dev.env" | cut -d= -f2-)"
 export MCP_TLS_KEYSTORE="$MCP_PLATFORM_DEV/certs/mcp-servicedesk/keystore.p12"
@@ -308,7 +337,7 @@ to cienkie nakładki, więc to samo działa lokalnie, w obrazie `maven:3.9.12-ec
 | --- | --- |
 | `ci/run.sh verify` (domyślny) | `hygiene`, `mvnw clean verify`, potem kontrola, że każdy moduł z `CI_TEST_MODULES` uruchomił testy (pominięte nie liczą się) i że powstał `mcp-app/target/mcp-manifest.json` |
 | `ci/run.sh hygiene` | cudzysłowy, spacje i wielokropek spoza ASCII oraz ślady narzędzi w źródłach (perl czyta przez `<<>>`) |
-| `ci/run.sh image` | `docker build` jaru z `verify` jako `mcp-server-servicedesk:<prefiks>-<sha7>` (prefiks z `CI_IMAGE_TAG_PREFIX`, domyślnie `m5`); tylko gałąź `main`, wymaga demona Dockera |
+| `ci/run.sh image` | `docker build` jaru z `verify` jako `mcp-server-servicedesk:<prefiks>-<sha7>` (prefiks z `CI_IMAGE_TAG_PREFIX`, domyślnie `m6`); tylko gałąź `main`, wymaga demona Dockera |
 
 Inny argument kończy się kodem 2. Merge request i pull request nie dostają sekretów ani gniazda Dockera: testy nie
 potrzebują kontenerów, a rejestr Maven z artefaktami platformy (`MCP_MAVEN_REPOSITORY_URL`, zwykła zmienna) jest wtedy
@@ -316,7 +345,7 @@ czytany anonimowo (`.ci/settings-anonymous.xml`). Dane dostępu (`MCP_MAVEN_REPO
 zmienne Protected i Masked, w Jenkinsie poświadczenie `mcp-maven-registry`) widzi tylko gałąź `main`, na której działa też
 krok `image` (runner z gniazdem Dockera; w GitLabie tag `docker-socket` musi należeć do runnera chronionego (protected),
 inaczej gniazdo trafiłoby w ręce merge requestu; w GitHubie sekrety są w Environment `ci-main`). Moduły z wymaganymi
-testami: `CI_TEST_MODULES` (domyślnie `mcp-application mcp-integration mcp-tools mcp-app`), dolna granica dla `mcp-app`: `CI_APP_MIN_TESTS` (20).
+testami: `CI_TEST_MODULES` (domyślnie `mcp-application mcp-integration mcp-tools mcp-app`), dolna granica dla `mcp-app`: `CI_APP_MIN_TESTS` (70).
 Rejestracja manifestu w gateway'u (`PUT` z certyfikatem `mcp-registry-ci-mcp-servicedesk`) jest osobnym krokiem pipeline'u
 serwera, bo wymaga sekretu, którego repo nie zawiera.
 

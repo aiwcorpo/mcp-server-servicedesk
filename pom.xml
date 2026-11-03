@@ -15,6 +15,20 @@
     <version>0.1.0-SNAPSHOT</version>
     <packaging>pom</packaging>
     <name>mcp-servicedesk :: Parent</name>
+    <url>https://github.com/aiwcorpo/mcp-server-servicedesk</url>
+
+    <licenses>
+        <license>
+            <name>Apache License, Version 2.0</name>
+            <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+            <distribution>repo</distribution>
+        </license>
+    </licenses>
+
+    <scm>
+        <url>https://github.com/aiwcorpo/mcp-server-servicedesk</url>
+        <connection>scm:git:https://github.com/aiwcorpo/mcp-server-servicedesk.git</connection>
+    </scm>
 
     <!-- Must be the Spring Boot version mcp-platform-starter is built against. -->
     <parent>
@@ -51,4 +65,33 @@
             </dependency>
         </dependencies>
     </dependencyManagement>
+
+    <build>
+        <plugins>
+            <!-- Apache-2.0 asks for LICENSE and NOTICE inside every distributed jar. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-resources-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>license-files</id>
+                        <phase>process-resources</phase>
+                        <goals><goal>copy-resources</goal></goals>
+                        <configuration>
+                            <outputDirectory>${project.build.outputDirectory}/META-INF</outputDirectory>
+                            <resources>
+                                <resource>
+                                    <directory>${maven.multiModuleProjectDirectory}</directory>
+                                    <includes>
+                                        <include>LICENSE</include>
+                                        <include>NOTICE</include>
+                                    </includes>
+                                </resource>
+                            </resources>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
 </project>
