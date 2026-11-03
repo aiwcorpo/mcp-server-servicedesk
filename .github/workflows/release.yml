@@ -8,9 +8,11 @@
 # stored. The packages mcp-contracts and mcp-starter-lib must grant this repository read access (Package settings,
 # Manage Actions access).
 #
-# Three jobs: verify runs the tests with contents: read and packages: read and hands over the jar and the manifest;
-# publish has packages: write, no build cache, and the write token only in the environment of the push step; release has
-# contents: write and uses it only in the step that creates the GitHub Release.
+# Three jobs. verify (contents: read, packages: read) runs the tests, builds the manifest, the SBOM and the image
+# (docker save) and hands them over as one artifact; all build tools run only here. publish (packages: write) has no
+# checkout and no build tool: it loads the image and pushes it, the token only in the environment of the push step.
+# release (contents: write) has no checkout and no build tool either: it creates the GitHub Release from the artifact,
+# the token only in the environment of that step.
 name: release
 
 on:
@@ -51,13 +53,20 @@ jobs:
           test "$(./mvnw -q -B -N org.apache.maven.plugins:maven-help-plugin:3.5.1:evaluate -Dexpression=project.version -DforceStdout)" = "$version"
       - name: Verify (tests, manifest)
         run: ci/run.sh verify
+      - name: SBOM (CycloneDX)
+        run: ./mvnw -B -s .ci/settings.xml org.cyclonedx:cyclonedx-maven-plugin:2.9.1:makeAggregateBom
+      - name: Build the image and save it
+        run: |
+          mkdir -p dist
+          docker build -t "ghcr.io/aiwcorpo/mcp-server-servicedesk:${GITHUB_REF_NAME#v}" .
+          docker save "ghcr.io/aiwcorpo/mcp-server-servicedesk:${GITHUB_REF_NAME#v}" -o dist/image.tar
+          cp mcp-app/target/mcp-manifest.json target/bom.json target/bom.xml dist/
       # actions/upload-artifact v4.6.2
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: build
-          path: |
-            mcp-app/target/mcp-servicedesk.jar
-            mcp-app/target/mcp-manifest.json
+          name: release
+          path: dist/
+          retention-days: 7
 
   publish:
     needs: verify
@@ -68,17 +77,13 @@ jobs:
       contents: read
       packages: write
     steps:
-      # actions/checkout v4.2.2
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-        with:
-          persist-credentials: false
       # actions/download-artifact v4.3.0
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
-          name: build
-          path: mcp-app/target
-      - name: Build the image
-        run: docker build -t "ghcr.io/aiwcorpo/mcp-server-servicedesk:${GITHUB_REF_NAME#v}" .
+          name: release
+          path: dist
+      - name: Load the image
+        run: docker load -i dist/image.tar
       - name: Push to ghcr.io
         run: |
           echo "$GITHUB_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
@@ -90,36 +95,20 @@ jobs:
   release:
     needs: publish
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 10
     environment: release
     permissions:
       contents: write
-      packages: read
-    env:
-      MCP_MAVEN_REPOSITORY_URL: https://maven.pkg.github.com/aiwcorpo/mcp-starter-lib
-      MCP_MAVEN_REPOSITORY_USER: ${{ github.actor }}
-      MCP_MAVEN_REPOSITORY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
     steps:
-      # actions/checkout v4.2.2
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-        with:
-          persist-credentials: false
-      # actions/setup-java v4.7.1
-      - uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00
-        with:
-          distribution: temurin
-          java-version: '25'
       # actions/download-artifact v4.3.0
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
-          name: build
-          path: mcp-app/target
-      - name: SBOM (CycloneDX)
-        run: ./mvnw -B -s .ci/settings.xml org.cyclonedx:cyclonedx-maven-plugin:2.9.1:makeAggregateBom
+          name: release
+          path: dist
       - name: Attach manifest and SBOM to the GitHub Release
         run: |
           flags=()
           if [[ "$GITHUB_REF_NAME" == *-* ]]; then flags+=(--prerelease); fi
-          gh release create "$GITHUB_REF_NAME" --verify-tag --title "$GITHUB_REF_NAME" "${flags[@]}" mcp-app/target/mcp-manifest.json target/bom.json target/bom.xml
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --verify-tag --title "$GITHUB_REF_NAME" "${flags[@]}" dist/mcp-manifest.json dist/bom.json dist/bom.xml
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
