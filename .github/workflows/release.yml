@@ -3,11 +3,12 @@
 # yet: the repository and the organization packages do not exist at the time of writing, so the workflow is checked by
 # reading, not by a run.
 #
-# Setup, once: environment "release" with required reviewers and a deployment rule for tags v*; repository secret
-# MCP_CONTRACTS_READ_TOKEN (read:packages only) and variable MCP_CONTRACTS_READ_USER, repository-level on purpose so that job
-# verify, which has no environment, can read the platform packages.
+# Setup, once: environment "release" with required reviewers and a deployment rule for tags v*. The jobs that build read
+# the platform packages with the GITHUB_TOKEN of the run (permissions: packages: read); no personal access token is
+# stored. The packages mcp-contracts and mcp-starter-lib must grant this repository read access (Package settings,
+# Manage Actions access).
 #
-# Three jobs: verify runs the tests with contents: read and the read-only token and hands over the jar and the manifest;
+# Three jobs: verify runs the tests with contents: read and packages: read and hands over the jar and the manifest;
 # publish has packages: write, no build cache, and the write token only in the environment of the push step; release has
 # contents: write and uses it only in the step that creates the GitHub Release.
 name: release
@@ -29,10 +30,11 @@ jobs:
     timeout-minutes: 45
     permissions:
       contents: read
+      packages: read
     env:
       MCP_MAVEN_REPOSITORY_URL: https://maven.pkg.github.com/aiwcorpo/mcp-starter-lib
-      MCP_MAVEN_REPOSITORY_USER: ${{ vars.MCP_CONTRACTS_READ_USER }}
-      MCP_MAVEN_REPOSITORY_PASSWORD: ${{ secrets.MCP_CONTRACTS_READ_TOKEN }}
+      MCP_MAVEN_REPOSITORY_USER: ${{ github.actor }}
+      MCP_MAVEN_REPOSITORY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
     steps:
       # actions/checkout v4.2.2
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -92,10 +94,11 @@ jobs:
     environment: release
     permissions:
       contents: write
+      packages: read
     env:
       MCP_MAVEN_REPOSITORY_URL: https://maven.pkg.github.com/aiwcorpo/mcp-starter-lib
-      MCP_MAVEN_REPOSITORY_USER: ${{ vars.MCP_CONTRACTS_READ_USER }}
-      MCP_MAVEN_REPOSITORY_PASSWORD: ${{ secrets.MCP_CONTRACTS_READ_TOKEN }}
+      MCP_MAVEN_REPOSITORY_USER: ${{ github.actor }}
+      MCP_MAVEN_REPOSITORY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
     steps:
       # actions/checkout v4.2.2
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
