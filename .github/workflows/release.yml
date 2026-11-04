@@ -3,12 +3,10 @@
 # yet: the repository and the organization packages do not exist at the time of writing, so the workflow is checked by
 # reading, not by a run.
 #
-# Setup, once: environment "release" with required reviewers and a deployment rule for tags v*. The jobs that build read
-# the platform packages with the GITHUB_TOKEN of the run (permissions: packages: read); no personal access token is
-# stored. The packages mcp-contracts and mcp-starter-lib must grant this repository read access (Package settings,
-# Manage Actions access).
+# Setup, once: environment "release" with required reviewers and a deployment rule for tags v*. The platform artifacts come
+# from Maven Central, so no job needs a registry login or a token to build.
 #
-# Three jobs. verify (contents: read, packages: read) runs the tests, builds the manifest, the SBOM and the image
+# Three jobs. verify (contents: read) runs the tests, builds the manifest, the SBOM and the image
 # (docker save) and hands them over as one artifact; all build tools run only here. publish (packages: write) has no
 # checkout and no build tool: it loads the image and pushes it, the token only in the environment of the push step.
 # release (contents: write) has no checkout and no build tool either: it creates the GitHub Release from the artifact,
@@ -32,11 +30,6 @@ jobs:
     timeout-minutes: 45
     permissions:
       contents: read
-      packages: read
-    env:
-      MCP_MAVEN_REPOSITORY_URL: https://maven.pkg.github.com/aiwcorpo/mcp-starter-lib
-      MCP_MAVEN_REPOSITORY_USER: ${{ github.actor }}
-      MCP_MAVEN_REPOSITORY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
     steps:
       # actions/checkout v4.2.2
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -54,7 +47,7 @@ jobs:
       - name: Verify (tests, manifest)
         run: ci/run.sh verify
       - name: SBOM (CycloneDX)
-        run: ./mvnw -B -s .ci/settings.xml org.cyclonedx:cyclonedx-maven-plugin:2.9.1:makeAggregateBom
+        run: ./mvnw -B org.cyclonedx:cyclonedx-maven-plugin:2.9.1:makeAggregateBom
       - name: Build the image and save it
         run: |
           mkdir -p dist

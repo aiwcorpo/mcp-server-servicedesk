@@ -6,15 +6,15 @@ contract (a resource type, a query field, a credential type) starts as a `propos
 
 ## Setup
 
-JDK 25, Linux or macOS with bash 3.2 or newer; Windows only through WSL2. The platform artifacts must be in `~/.m2` or in
-the registry named by `MCP_MAVEN_REPOSITORY_URL` (see the README of `mcp-starter-lib`). No container runtime and no service desk are
+JDK 25, Linux or macOS with bash 3.2 or newer; Windows only through WSL2. The platform artifacts come from Maven Central or must be
+in `~/.m2` (see the README of `mcp-starter-lib`). No container runtime and no service desk are
 needed: the tests run the whole server against a stub backend.
 
 ```bash
 ci/run.sh verify     # text checks, then clean verify; the same script runs in CI
 ```
 
-`ci/run.sh verify` must pass before a merge. A new tool needs the items of `docs/jak-napisac-narzedzie.md`: risk, title,
+`ci/run.sh verify` must pass before a merge. A new tool needs the items of the [tool guide](https://github.com/aiwcorpo/mcp-docs/blob/main/docs/developer/tools.md) in `mcp-docs`: risk, title,
 `@ResourceRef` for every id it names, a closed argument schema, a negative test, and a row in the README table.
 
 ## Commits
