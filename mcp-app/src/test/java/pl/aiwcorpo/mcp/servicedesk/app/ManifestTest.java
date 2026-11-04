@@ -165,13 +165,13 @@ class ManifestTest extends ServerTestSupport {
     }
 
     @Test
-    void everyToolHasAPolishTitle() throws Exception {
+    void everyToolHasTheEnglishTitle() throws Exception {
         Map<String, String> titles = new java.util.HashMap<>();
         for (JsonNode tool : manifest().get("tools")) {
             titles.put(tool.get("name").asString(), tool.at("/definition/title").asString());
         }
-        assertThat(titles).containsOnly(Map.entry("search_tickets", "Szukaj zgłoszeń w kolejce"),
-                Map.entry("get_ticket", "Pobierz zgłoszenie"), Map.entry("add_note", "Dodaj notatkę do zgłoszenia"));
+        assertThat(titles).containsOnly(Map.entry("search_tickets", "Search tickets"),
+                Map.entry("get_ticket", "Get ticket"), Map.entry("add_note", "Add note"));
     }
 
     @Test

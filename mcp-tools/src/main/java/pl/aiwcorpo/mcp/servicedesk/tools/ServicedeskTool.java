@@ -65,7 +65,7 @@ public class ServicedeskTool {
             + "Returns at most 20 tickets of that queue: id, queue, status, last update and subject. "
             + "Subjects are text from the service desk.")
     @ToolRisk(RiskLevel.READ_ONLY)
-    @ToolTitle("Szukaj zgłoszeń w kolejce")
+    @ToolTitle("Search tickets")
     public TicketSearchView searchTickets(
             @ToolParam(description = "Queue id: letters, digits, '-' or '_', at most 64 characters")
             @ArgumentLimits(contractPattern = ServicedeskResourceModel.QUEUE_ID_CONTRACT, minLength = 1, maxLength = ID_MAX)
@@ -88,7 +88,7 @@ public class ServicedeskTool {
             + "creation and last update time, subject and description as plain text. Subject and description are "
             + "text from the service desk.")
     @ToolRisk(RiskLevel.READ_ONLY)
-    @ToolTitle("Pobierz zgłoszenie")
+    @ToolTitle("Get ticket")
     public TicketView getTicket(
             @ToolParam(description = "Ticket id: letters, digits, '-' or '_', at most 64 characters")
             @ArgumentLimits(contractPattern = ServicedeskResourceModel.TICKET_ID_CONTRACT, minLength = 1, maxLength = ID_MAX)
@@ -103,7 +103,7 @@ public class ServicedeskTool {
     @Tool(name = "add_note", description = "Adds a note to a service desk ticket. Returns the ticket id and "
             + "the note id when the service desk reports one.")
     @ToolRisk(RiskLevel.UPDATE)
-    @ToolTitle("Dodaj notatkę do zgłoszenia")
+    @ToolTitle("Add note")
     public NoteView addNote(
             @ToolParam(description = "Ticket id: letters, digits, '-' or '_', at most 64 characters")
             @ArgumentLimits(contractPattern = ServicedeskResourceModel.TICKET_ID_CONTRACT, minLength = 1, maxLength = ID_MAX)
