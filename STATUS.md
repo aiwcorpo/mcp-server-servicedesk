@@ -1,5 +1,7 @@
 # STATUS - mcp-server-servicedesk (ws-04)
 
+Wydanie 1.0.0 (2026-11-04): wersja projektu 1.0.0, starter 3.0.0 (kontrakty 6.3.2) z Maven Central; CHANGELOG z wpisem 1.0.0; GitHub Packages nie wystepuje juz nigdzie (pozostaje `packages: write` w jobie publikacji ghcr.io). `make ci` zielone: 115 testow (application 11, integration 29, tools 2, app 73), 0 bledow. Obraz `mcp-server-servicedesk:m6-<sha7>` budowany z `ci/run.sh image`.
+
 Porządki przed wydaniem 1.0.0 (2026-11-04): tytuły narzędzi po angielsku (3 z 3, `definitionHash` zmieniony we wszystkich trzech: "Search tickets", "Get ticket", "Add note"); `docs/` usunięte, bo pokrywa je `mcp-docs`, treści unikalne (katalog narzędzi, różnice w architekturze, niezmienniki konta serwisowego i granicy kolejek, uwagi do pisania narzędzia) przekazane koordynatorowi do `mcp-docs` jako angielskie importy; CI bez GitHub Packages (usunięte `.ci/settings*.xml`, zmienne i sekrety `MCP_MAVEN_REPOSITORY_*`, `packages: read`, środowisko `ci-main`), zadanie PR tylko `contents: read` bez tokenu; obraz z etykietą `org.opencontainers.image.source`. Wersje bez zmian (bump do 1.0.0 w osobnym przejściu). 115 testów, 0 błędów.
 
 M1: osiągnięty (2026-10-27, runda 2; 2026-10-28 przeniesiony na starter 3.0.0-alpha-10) - `search_tickets`, `get_ticket`, `add_note` na generycznym adapterze REST (D10); konto serwisowe fail-closed (tylko kolejki z konfiguracji, pusta lista = odmowa), notatki z autorem zlecenia, walidacja argumentów w starterze (C10 + C8), zmiany template'u od 7f65f8f przeniesione, 84 testy na stubie.

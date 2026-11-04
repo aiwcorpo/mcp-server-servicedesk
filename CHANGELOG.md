@@ -1,11 +1,17 @@
 # Changelog
 
-Versions follow SemVer, newest first. Until the first public release the working version is `0.1.0-SNAPSHOT`.
+Versions follow SemVer, newest first.
 
-## Unreleased
+## 1.0.0 - 2026-11-04
 
-- Starter 3.0.0-beta-14, contracts 6.3.2 (no change in the server code; tool definition hashes are unchanged).
-- Apache-2.0: `LICENSE`, `NOTICE` (also in `META-INF` of every jar), licence and `scm` in `pom.xml`.
-- `SECURITY.md`, `CONTRIBUTING.md`, the `release.yml` workflow (ghcr.io image, manifest and CycloneDX SBOM in the GitHub release).
-- CI: GitHub actions pinned to SHAs, CI images pinned by digest, minimal permissions per job.
-- README: installation and daily operation, no paths from a user's home directory; `ci/run.sh` finds JDK 25 on its own.
+First public release. Built on `mcp-platform-starter` 3.0.0 (contracts 6.3.2).
+
+- MCP server for a service desk with three tools: `search_tickets` (tickets of one queue, up to 20 results), `get_ticket` and
+  `add_note`. The only accepted credential type is `service-account`; access to queues comes from the gateway policy
+  (`mcp-servicedesk-queue-<id>` groups) and an empty queue list in the configuration means refusal.
+- Generic REST adapter: paths, query parameters, the note body and the position of every field in the JSON come from the
+  `servicedesk.api` configuration, so a product can be adopted without code changes. The tests run against a stub backend.
+- Tool titles are English: "Search tickets", "Get ticket", "Add note".
+- Apache-2.0 licence, NOTICE (also in `META-INF` of every jar), SECURITY.md, CONTRIBUTING.md.
+- CI through one script, `ci/run.sh`, for GitLab, Jenkins and GitHub Actions; the `release.yml` workflow publishes the image to
+  ghcr.io and attaches the manifest and a CycloneDX SBOM to the GitHub release.

@@ -4,7 +4,7 @@ MCP server for a service desk, one of the native servers of the aiwcorpo MCP pla
 tickets of a queue, read a ticket and add a note. It is a deployable product that runs next to the platform
 gateway, not a library.
 
-It is built on `mcp-platform-starter` 3.0.0-beta-14 (Java 25, Spring Boot 4.1.0, Spring AI 2.0.0, `mcp-contracts` 6.3.2) and
+It is built on `mcp-platform-starter` 3.0.0 (Java 25, Spring Boot 4.1.0, Spring AI 2.0.0, `mcp-contracts` 6.3.2) and
 runs only behind the gateway. It accepts traffic over mTLS with the gateway's internal JWT and answers 401 without it; there
 is no anonymous mode. Logging users in, deciding who may call a tool and confirming actions are the gateway's job.
 
