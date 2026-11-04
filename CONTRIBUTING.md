@@ -7,7 +7,7 @@ contract (a resource type, a query field, a credential type) starts as a `propos
 ## Setup
 
 JDK 25, Linux or macOS with bash 3.2 or newer; Windows only through WSL2. The platform artifacts must be in `~/.m2` or in
-the registry named by `MCP_MAVEN_REPOSITORY_URL` (README, "Instalacja"). No container runtime and no service desk are
+the registry named by `MCP_MAVEN_REPOSITORY_URL` (see the README of `mcp-starter-lib`). No container runtime and no service desk are
 needed: the tests run the whole server against a stub backend.
 
 ```bash

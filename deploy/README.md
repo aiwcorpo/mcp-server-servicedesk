@@ -1,15 +1,15 @@
 # deploy/
 
-Uruchomienie serwera na VM przez systemd. Opis krok po kroku: `docs/operations/deployment-vm-systemd.md`.
-Obraz kontenera: `Dockerfile` w katalogu głównym.
+Running the server on a VM under systemd. Step by step: `docs/operations/deployment-vm-systemd.md` (in Polish).
+The container image is built from the `Dockerfile` in the repository root.
 
 ```
 deploy/
-├── systemd/
-│   ├── mcp-servicedesk.service         unit (konto mcp, sandbox systemd, logi do journald)
-│   └── mcp-servicedesk.env.template    zmienne środowiska -> /etc/mcp-servicedesk/mcp-servicedesk.env
-└── scripts/
-    ├── install.sh                  pierwsza instalacja (konto, katalogi, unit)
-    ├── update.sh                   podmiana jara z kopią do wycofania
-    └── healthcheck.sh              /actuator/health po mTLS
+|-- systemd/
+|   |-- mcp-servicedesk.service         unit (account mcp, systemd sandbox, logs to journald)
+|   `-- mcp-servicedesk.env.template    environment variables -> /etc/mcp-servicedesk/mcp-servicedesk.env
+`-- scripts/
+    |-- install.sh                  first installation (account, directories, unit)
+    |-- update.sh                   replaces the jar and keeps a copy for rollback
+    `-- healthcheck.sh              /actuator/health over mTLS
 ```

@@ -1,11 +1,11 @@
 # Changelog
 
-Format: wersje SemVer, od najnowszej. Do pierwszego wydania publicznego obowiązuje `0.1.0-SNAPSHOT`.
+Versions follow SemVer, newest first. Until the first public release the working version is `0.1.0-SNAPSHOT`.
 
-## Niewydane
+## Unreleased
 
-- Starter 3.0.0-beta-14, kontrakty 6.3.2 (bez zmian w kodzie serwera; hashe definicji narzędzi jak wcześniej).
-- Apache-2.0: `LICENSE`, `NOTICE` (także w `META-INF` każdego jara), licencja i `scm` w `pom.xml`.
-- `SECURITY.md`, `CONTRIBUTING.md`, workflow `release.yml` (obraz ghcr.io, manifest i SBOM CycloneDX w wydaniu GitHub).
-- CI: akcje GitHub przypięte do SHA, obrazy CI po digeście, uprawnienia minimalne per job.
-- README: instalacja, codzienna obsługa, bez ścieżek z katalogu użytkownika; `ci/run.sh` sam szuka JDK 25.
+- Starter 3.0.0-beta-14, contracts 6.3.2 (no change in the server code; tool definition hashes are unchanged).
+- Apache-2.0: `LICENSE`, `NOTICE` (also in `META-INF` of every jar), licence and `scm` in `pom.xml`.
+- `SECURITY.md`, `CONTRIBUTING.md`, the `release.yml` workflow (ghcr.io image, manifest and CycloneDX SBOM in the GitHub release).
+- CI: GitHub actions pinned to SHAs, CI images pinned by digest, minimal permissions per job.
+- README: installation and daily operation, no paths from a user's home directory; `ci/run.sh` finds JDK 25 on its own.
