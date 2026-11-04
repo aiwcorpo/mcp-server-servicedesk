@@ -132,7 +132,7 @@ service desk. The server does not start without these:
 
 Optional: `MCP_SERVICEDESK_SSL_BUNDLE` (SSL bundle for the service desk, such as an internal CA), `MCP_GATEWAY_ISSUER`,
 `MCP_PORT` (`8443`) and `MCP_BIND`. `MCP_SERVICEDESK_ALLOW_PLAIN_HTTP=true` allows `http` outside `dev` and exists only for the
-mocks of `mcp-platform-dev`: the credential then travels in clear text. Defaults and property names are in the
+mocks of the dev stack: the credential then travels in clear text. Defaults and property names are in the
 [server environment reference](https://github.com/aiwcorpo/mcp-docs/blob/main/docs/reference/env-servers.md)
 (`docs/reference/env-servers.md` in `mcp-docs`). The MCP endpoint is `/mcp`; without a JWT only `/actuator/health` answers.
 
@@ -162,7 +162,7 @@ curl -s -o /dev/null -w '%{http_code}\n' -X POST -H 'Content-Type: application/j
 The `dev` profile accepts JWTs signed with the published test keys of the contracts and needs no client certificate. For that
 reason it listens on loopback only, and the starter refuses to start `dev` on another address. Never enable it on a host or in a
 container that the gateway connects to, and never put `SPRING_PROFILES_ACTIVE=dev` into an `.env` file, a systemd unit or an
-image. To run against the `mcp-platform-dev` environment with mTLS, see `mcp-docs`.
+image. The local dev stack is not public yet; to run the platform with mTLS use the Compose install in `mcp-docs` (`examples/compose`).
 
 ## Documentation
 

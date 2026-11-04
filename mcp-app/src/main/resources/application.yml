@@ -53,7 +53,7 @@ servicedesk:
     connect-timeout: 2s
     read-timeout: 10s
     max-response-size: 1MB
-    # Plain http outside 'dev' only for the mocks of mcp-platform-dev; never in a real deployment.
+    # Plain http outside 'dev' only for the mocks of the dev stack; never in a real deployment.
     allow-plain-http: ${MCP_SERVICEDESK_ALLOW_PLAIN_HTTP:false}
   # Reference REST layout of the generic adapter (D10, product not chosen). For a concrete product, override
   # this block from a file given in --spring.config.additional-location (README, "Adapter REST").

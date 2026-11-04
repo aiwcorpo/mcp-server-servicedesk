@@ -197,7 +197,7 @@ public class ServicedeskResourceAdapter implements ServicedeskResourcePort {
             if (!plainHttpAllowed) {
                 // The credential travels in a header; over http it would cross the network in clear text.
                 throw new IllegalStateException("servicedesk.backend.base-url must use https outside the 'dev' profile "
-                        + "(servicedesk.backend.allow-plain-http exists for the mocks of mcp-platform-dev only)");
+                        + "(servicedesk.backend.allow-plain-http exists for the mocks of the dev stack only)");
             }
             LOG.warn("event=backend_plain_http detail=\"credentials go to the backend unencrypted\"");
         }

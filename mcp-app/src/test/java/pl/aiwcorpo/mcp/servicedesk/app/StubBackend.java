@@ -21,7 +21,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 /**
  * The service desk in tests: a real HTTP server on loopback speaking the adapter's reference REST layout
  * ({@code application.yml}, {@code servicedesk.api}), so the adapter runs with its real client, URI building,
- * JSON pointers and error mapping. There is no service desk mock in mcp-platform-dev (STATUS.md).
+ * JSON pointers and error mapping. There is no service desk mock in the dev stack (STATUS.md).
  *
  * <p>Tickets: {@code IT-1}, {@code IT-2}, {@code IT-NOTE401} in queue IT, {@code OPS-5} in OPS, {@code FIN-7}
  * in FIN, {@code MOVED-3} in IT until {@link #move} puts it elsewhere. Special answers: {@code IT-403} 403,
