@@ -1,0 +1,4 @@
+[
+  {"group": "mcp-servicedesk-queue-IT", "scopes": ["ServiceDesk::Queue/IT"]},
+  {"group": "mcp-servicedesk-queue-OPS", "scopes": ["ServiceDesk::Queue/OPS"]}
+]

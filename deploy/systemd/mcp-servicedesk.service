@@ -31,9 +31,6 @@ LockPersonality=true
 # The JIT needs writable and executable memory.
 MemoryDenyWriteExecute=false
 ReadOnlyPaths=/etc/mcp-servicedesk /opt/mcp-servicedesk
-# /var/lib/mcp-servicedesk, writable for the policy state (revision and archive digest per channel).
-StateDirectory=mcp-servicedesk
-StateDirectoryMode=0700
 RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
 CapabilityBoundingSet=
 AmbientCapabilities=
