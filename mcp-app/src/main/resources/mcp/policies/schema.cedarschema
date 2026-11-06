@@ -1,0 +1,26 @@
+// Fragment of mcp-servicedesk: one namespace, the server's own. Base types (User, ResourceScope, RequestContext) are
+// referenced unqualified from the empty namespace of cedar/mcp.cedarschema. Every entity type has `scopes`.
+
+namespace ServiceDesk {
+  // classification: what the service desk reports for the queue, optional. A queue that reports none is not
+  // restricted (decision of the platform owner). The entity builder normalizes it (trim, ASCII lower case); the
+  // canonical value for restricted data is "restricted".
+  entity Queue {
+    id: String,
+    classification?: Set<String>,
+    scopes: Set<ResourceScope>,
+  };
+  // `queue` duplicates the parent edge because Cedar cannot read attributes of an ancestor through `in`; a ticket
+  // inherits the classification of its queue through it.
+  entity Ticket in [Queue] {
+    id: String,
+    queue: Queue,
+    scopes: Set<ResourceScope>,
+  };
+
+  action "read", "update", "delete", "admin" appliesTo {
+    principal: [User],
+    resource: [Queue, Ticket],
+    context: RequestContext,
+  };
+}

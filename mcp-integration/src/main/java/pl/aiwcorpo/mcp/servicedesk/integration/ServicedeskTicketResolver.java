@@ -63,4 +63,20 @@ class ServicedeskTicketResolver implements ResourceResolver<ClassifiedTicket> {
     public ResolvedResource describe(ClassifiedTicket ticket) {
         return ServicedeskResourceDescription.of(ticket);
     }
+
+    @Override
+    public List<String> scopeTypes() {
+        return List.of(ServicedeskResourceModel.QUEUE_TYPE);
+    }
+
+    @Override
+    public Optional<ResolvedResource> probeOutsideScopes(String ticketId) {
+        return Optional.of(ServicedeskResourceDescription.probeOfTicketOutsideScopes(ticketId));
+    }
+
+    /** The service account sees every queue, so a failure on a ticket must not differ from a missing ticket. */
+    @Override
+    public boolean hidesFailureForServiceAccount() {
+        return true;
+    }
 }

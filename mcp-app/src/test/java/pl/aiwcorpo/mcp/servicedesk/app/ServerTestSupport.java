@@ -11,10 +11,9 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.time.Duration;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 import java.util.Map;
+import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.test.context.ActiveProfiles;
@@ -39,21 +38,24 @@ abstract class ServerTestSupport {
     static final String SERVER_ID = "mcp-servicedesk";
     static final String SYSTEM = "servicedesk";
     static final String ENDPOINT = "/mcp";
-    static final Set<String> CONTRACT_SYSTEMS = contractSystems();
+
+    static final List<String> QUEUES = List.of("IT", "OPS", "SEC", "GONE", "FIN");
 
     static final TestGateway GATEWAY = TestGateway.start(SERVER_ID);
     static final StubBackend BACKEND = StubBackend.start();
 
     /**
      * The caller of most tests: may call the read and write tools and is granted the queues IT, OPS, SEC and GONE
-     * (not FIN) in the scope mapping of {@link TestPolicyBundle}.
+     * (not FIN) in the scope mapping of {@link #GATEWAY}.
      */
     static final List<String> CALLER_GROUPS = List.of("mcp-servicedesk-read", "mcp-servicedesk-write",
             "mcp-servicedesk-queue-IT", "mcp-servicedesk-queue-OPS", "mcp-servicedesk-queue-SEC",
             "mcp-servicedesk-queue-GONE");
 
     static {
-        TestPolicyBundle.publish(GATEWAY.main());
+        Map<String, List<String>> mapping = new java.util.LinkedHashMap<>();
+        QUEUES.forEach(queue -> mapping.put("mcp-servicedesk-queue-" + queue, List.of("ServiceDesk::Queue/" + queue)));
+        GATEWAY.policyData().scopeMapping(mapping);
     }
 
     @DynamicPropertySource
@@ -105,29 +107,24 @@ abstract class ServerTestSupport {
         return client;
     }
 
-    /**
-     * The starter sends only C10 errors valid against {@code tool-error.schema.json}, whose {@code system} is the
-     * closed {@code SystemId} list of the contracts. For a system outside it (the template's placeholder, a
-     * trial name) a {@code credential_required} becomes {@code internal_error}; for the platform's systems the
-     * full error with the portal link is expected.
-     */
+    /** A C10 {@code credential_required} with the portal link of the system, as the user is meant to see it. */
     static void assertCredentialRequired(McpSchema.CallToolResult result) {
         assertThat(result.isError()).isTrue();
-        if (CONTRACT_SYSTEMS.contains(SYSTEM)) {
-            assertThat(text(result)).contains("\"error\":\"credential_required\"", "\"system\":\"" + SYSTEM + "\"",
-                    "\"connectUrl\":\"http://localhost:18090/connections?system=" + SYSTEM + "\"");
-        } else {
-            assertThat(text(result)).contains("\"error\":\"internal_error\"");
-        }
+        assertThat(text(result)).contains("\"error\":\"credential_required\"", "\"system\":\"" + SYSTEM + "\"",
+                "\"connectUrl\":\"http://localhost:18090/connections?system=" + SYSTEM + "\"");
     }
 
-    private static Set<String> contractSystems() {
+    /** The system id must be one the contracts accept: {@code mcp-<system>} is the server id and the CN of its certificate. */
+    @Test
+    void systemIsAnIdOfTheContracts() {
+        assertThat(SYSTEM).matches(systemIdPattern());
+        assertThat(SERVER_ID).isEqualTo("mcp-" + SYSTEM);
+    }
+
+    private static String systemIdPattern() {
         try (InputStream schema = ServerTestSupport.class.getClassLoader()
                 .getResourceAsStream("mcp-contracts/schemas/common.schema.json")) {
-            Set<String> systems = new HashSet<>();
-            JsonMapper.builder().build().readTree(schema).at("/$defs/SystemId/enum")
-                    .forEach(system -> systems.add(system.asString()));
-            return Set.copyOf(systems);
+            return JsonMapper.builder().build().readTree(schema).at("/$defs/SystemId/pattern").asString();
         } catch (IOException ex) {
             throw new UncheckedIOException(ex);
         }

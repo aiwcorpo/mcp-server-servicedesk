@@ -37,4 +37,9 @@ class ServicedeskQueueResolver implements ResourceResolver<Queue> {
     public ResolvedResource describe(Queue queue) {
         return ServicedeskResourceDescription.of(queue);
     }
+
+    @Override
+    public Optional<ResolvedResource> probe(String queueId) {
+        return Optional.of(ServicedeskResourceDescription.probeOfQueue(queueId));
+    }
 }

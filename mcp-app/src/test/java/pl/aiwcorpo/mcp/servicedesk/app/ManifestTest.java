@@ -12,6 +12,7 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 import pl.aiwcorpo.mcp.manifest.DefinitionHash;
 import pl.aiwcorpo.mcp.manifest.ManifestRules;
+import pl.aiwcorpo.mcp.servicedesk.core.domain.ServicedeskResourceModel;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -120,6 +121,29 @@ class ManifestTest extends ServerTestSupport {
         assertThat(ManifestRules.violations(manifest.toString())).isEmpty();
         assertThat(manifest.get("serverId").asString()).isEqualTo(SERVER_ID);
         assertThat(manifest.get("system").asString()).isEqualTo(SYSTEM);
+    }
+
+    @Test
+    void theManifestCarriesThePoliciesAndTheDeclarationsOfTheJarWithTheirHash() throws Exception {
+        JsonNode manifest = manifest();
+
+        assertThat(manifest.at("/policies/namespace").asString()).isEqualTo("ServiceDesk");
+        assertThat(manifest.at("/policies/files").findValuesAsString("name")).containsExactly("read.cedar", "update.cedar");
+        assertThat(manifest.get("policiesHash").asString()).startsWith("sha256:");
+        List<String> declared = new ArrayList<>();
+        manifest.get("resourceTypes").forEach(type -> declared.add(type.get("type").asString()));
+        assertThat(declared).containsExactlyInAnyOrder("ServiceDesk::Queue", "ServiceDesk::Ticket");
+        JsonNode ticket = manifest.get("resourceTypes").valueStream()
+                .filter(type -> "ServiceDesk::Ticket".equals(type.get("type").asString())).findFirst().orElseThrow();
+        assertThat(ticket.get("parent").asString()).isEqualTo("ServiceDesk::Queue");
+        assertThat(ticket.get("parentAttribute").asString()).isEqualTo("queue");
+    }
+
+    @Test
+    void theIdPatternOfBothTypesIsTheOneTheDomainChecksIdsWith() throws Exception {
+        for (JsonNode type : manifest().get("resourceTypes")) {
+            assertThat(type.get("idPattern").asString()).isEqualTo(ServicedeskResourceModel.ID_PATTERN);
+        }
     }
 
     @Test

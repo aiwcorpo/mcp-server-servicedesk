@@ -68,7 +68,7 @@ public class ServicedeskTool {
     @ToolTitle("Search tickets")
     public TicketSearchView searchTickets(
             @ToolParam(description = "Queue id: letters, digits, '-' or '_', at most 64 characters")
-            @ArgumentLimits(contractPattern = ServicedeskResourceModel.QUEUE_ID_CONTRACT, minLength = 1, maxLength = ID_MAX)
+            @ArgumentLimits(resourceType = ServicedeskResourceModel.QUEUE_TYPE, minLength = 1, maxLength = ID_MAX)
             @ResourceRef(type = ServicedeskResourceModel.QUEUE_TYPE) String queue,
             @ToolParam(description = "Text to search for, 1-200 characters")
             @ArgumentLimits(minLength = 1, maxLength = TEXT_MAX) String text) {
@@ -91,7 +91,7 @@ public class ServicedeskTool {
     @ToolTitle("Get ticket")
     public TicketView getTicket(
             @ToolParam(description = "Ticket id: letters, digits, '-' or '_', at most 64 characters")
-            @ArgumentLimits(contractPattern = ServicedeskResourceModel.TICKET_ID_CONTRACT, minLength = 1, maxLength = ID_MAX)
+            @ArgumentLimits(resourceType = ServicedeskResourceModel.TICKET_TYPE, minLength = 1, maxLength = ID_MAX)
             @ResourceRef(type = ServicedeskResourceModel.TICKET_TYPE) String ticketId) {
         // The ticket the resolver fetched for the policy: the answer judged is the answer returned.
         ClassifiedTicket fetched = ResourceContext.current().orElseThrow()
@@ -106,7 +106,7 @@ public class ServicedeskTool {
     @ToolTitle("Add note")
     public NoteView addNote(
             @ToolParam(description = "Ticket id: letters, digits, '-' or '_', at most 64 characters")
-            @ArgumentLimits(contractPattern = ServicedeskResourceModel.TICKET_ID_CONTRACT, minLength = 1, maxLength = ID_MAX)
+            @ArgumentLimits(resourceType = ServicedeskResourceModel.TICKET_TYPE, minLength = 1, maxLength = ID_MAX)
             @ResourceRef(type = ServicedeskResourceModel.TICKET_TYPE) String ticketId,
             @ToolParam(description = "Note text, 1-10000 characters")
             @ArgumentLimits(minLength = 1, maxLength = NOTE_MAX) String body) {

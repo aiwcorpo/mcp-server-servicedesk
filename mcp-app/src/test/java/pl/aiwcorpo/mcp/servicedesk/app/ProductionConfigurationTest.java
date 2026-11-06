@@ -46,14 +46,12 @@ class ProductionConfigurationTest {
     }
 
     @Test
-    void theProductionConfigurationNeedsTheSignedBundleAndKeepsItsStateButAllowsNoTestKeys() throws IOException {
-        PropertySource<?> base = new YamlPropertySourceLoader()
-                .load("application.yml", new ClassPathResource("application.yml")).getFirst();
+    void thePolicyDataComeFromTheGatewayAndNoPolicyBundleSettingRemains() throws IOException {
+        Map<String, Object> base = (Map<String, Object>) new YamlPropertySourceLoader()
+                .load("application.yml", new ClassPathResource("application.yml")).getFirst().getSource();
 
-        assertThat(base.getProperty("aiwcorpo.mcp.platform.policy.main.url")).isNotNull();
-        assertThat(base.getProperty("aiwcorpo.mcp.platform.policy.main.public-key-file")).isNotNull();
-        assertThat(base.getProperty("aiwcorpo.mcp.platform.policy.state-dir")).isNotNull();
-        assertThat(base.getProperty("aiwcorpo.mcp.platform.policy.allow-test-keys")).isNull();
+        assertThat(String.valueOf(base.get("aiwcorpo.mcp.platform.policy-data.url"))).isEqualTo("${MCP_GATEWAY_POLICY_DATA_URL:}");
+        assertThat(base.keySet()).noneMatch(key -> key.startsWith("aiwcorpo.mcp.platform.policy."));
     }
 
     @Test

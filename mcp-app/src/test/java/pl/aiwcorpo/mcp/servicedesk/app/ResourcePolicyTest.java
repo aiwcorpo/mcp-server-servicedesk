@@ -11,9 +11,9 @@ import org.junit.jupiter.api.Test;
 import pl.aiwcorpo.mcp.platform.security.BackendCredential;
 
 /**
- * The policy (C7) on the queue and the ticket, with the example policies of the contracts: an object is judged by what
+ * The policy (C7) on the queue and the ticket, with the policies of this server and the rules of the platform: an object is judged by what
  * the service desk says about it now, and every refusal looks like a missing object. The server's configuration opens
- * no queue (CC-163): the grants of the bundle are the only source.
+ * no queue (CC-163): the scope mapping of the gateway is the only source.
  */
 class ResourcePolicyTest extends ServerTestSupport {
 
