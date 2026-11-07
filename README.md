@@ -122,7 +122,6 @@ configured pointers are read from a response, and redirects are not followed. A 
 ```bash
 export JAVA_HOME="$(/usr/libexec/java_home -v 25)"   # macOS; on Linux the JDK 25 directory
 ./mvnw verify        # jar: mcp-app/target/mcp-servicedesk.jar and mcp-app/target/mcp-manifest.json
-make ci              # ci/run.sh verify: text checks, clean verify, required test counts, manifest present
 ```
 
 Tests need no Docker and no platform environment. `TestGateway` from `mcp-platform-test` signs internal JWTs, and `StubBackend`
@@ -130,7 +129,7 @@ is an HTTP server that imitates a service desk in the reference layout.
 
 Platform artifacts (`mcp-platform-starter`, `mcp-contracts`) come from Maven Central or from
 `~/.m2`; the setup is described in the README of `mcp-starter-lib`. Linux and macOS with bash 3.2 or newer; Windows only
-through WSL2.
+through WSL2. The GitHub, GitLab and Jenkins files run `./mvnw -B verify`.
 
 The build writes `mcp-app/target/mcp-manifest.json`. That file, not the answer of a running server, is what CI registers with
 the gateway.
@@ -163,8 +162,7 @@ There are no variables for allowed queues or for the credential mode. Queues com
 
 ## Install
 
-The server is one jar or one image. For a VM with systemd use `deploy/scripts/install.sh mcp-app/target/mcp-servicedesk.jar` and the
-environment template `deploy/systemd/mcp-servicedesk.env.template`; the [VM installation guide](https://github.com/aiwcorpo/mcp-docs/blob/main/docs/operator/install-vm.md) in `mcp-docs` has the steps. For a
+The server is one jar or one image. For a VM with systemd the jar `mcp-app/target/mcp-servicedesk.jar` and the environment template `deploy/systemd/mcp-servicedesk.env.template` are installed as in `deploy/README.md`; the [VM installation guide](https://github.com/aiwcorpo/mcp-docs/blob/main/docs/operator/install-vm.md) in `mcp-docs` has the steps. For a
 container run `docker build -t mcp-servicedesk:<tag> .` after `./mvnw verify` (image `eclipse-temurin:25-jre` on glibc, because
 `cedar-java` loads a native library; user `mcp`, port 8443). `deploy/README.md` has the Compose install and the procedure that adds the system in the broker and the server in the gateway
 (and removes them) without restarting anything. After an update register the fresh manifest with the gateway and approve the

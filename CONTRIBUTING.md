@@ -11,10 +11,10 @@ in `~/.m2` (see the README of `mcp-starter-lib`). No container runtime and no se
 needed: the tests run the whole server against a stub backend.
 
 ```bash
-ci/run.sh verify     # text checks, then clean verify; the same script runs in CI
+./mvnw -B verify     # the same command runs in CI
 ```
 
-`ci/run.sh verify` must pass before a merge. A new tool needs the items of the [tool guide](https://github.com/aiwcorpo/mcp-docs/blob/main/docs/developer/tools.md) in `mcp-docs`: risk, title,
+`./mvnw -B verify` must pass before a merge. A new tool needs the items of the [tool guide](https://github.com/aiwcorpo/mcp-docs/blob/main/docs/developer/tools.md) in `mcp-docs`: risk, title,
 `@ResourceRef` for every id it names, a closed argument schema, a negative test, and a row in the README table.
 
 ## Commits
