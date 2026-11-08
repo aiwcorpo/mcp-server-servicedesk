@@ -5,7 +5,7 @@ tickets of a queue, read a ticket and add a note. It is a deployable product tha
 gateway, not a library.
 
 It is built on `mcp-platform-starter` 4.0.0 (Java 25, Spring Boot 4.1.0, Spring AI 2.0.0, `mcp-contracts` 7.0.0) and
-runs only behind the gateway. It accepts traffic over mTLS with the gateway's internal JWT and answers 401 without it; there
+runs only behind the gateway. The gateway connects to its address and pulls its manifest; it accepts only calls with the gateway's internal JWT and answers 401 without it; there
 is no anonymous mode. Logging users in, deciding who may call a tool and confirming actions are the gateway's job.
 
 Platform documentation (gateway, policies, portal, operation) lives in
@@ -131,29 +131,27 @@ Platform artifacts (`mcp-platform-starter`, `mcp-contracts`) come from Maven Cen
 `~/.m2`; the setup is described in the README of `mcp-starter-lib`. Linux and macOS with bash 3.2 or newer; Windows only
 through WSL2. The GitHub, GitLab and Jenkins files run `./mvnw -B verify`.
 
-The build writes `mcp-app/target/mcp-manifest.json`. That file, not the answer of a running server, is what CI registers with
-the gateway.
+The build writes `mcp-app/target/mcp-manifest.json`. That file is the document the running server serves at `/.well-known/mcp-manifest` for the gateway to pull, kept as an artifact so that a reviewer can read what a commit
+publishes.
 
 Modules: `mcp-core` (domain and ports), `mcp-application` (use cases and the queue check), `mcp-integration` (REST adapter,
 resource resolvers), `mcp-tools` (MCP tools), `mcp-app` (bootstrap, the single jar, end-to-end tests).
 
 ## Configuration
 
-`application.yml` is the production configuration: mTLS, JWKS of the gateway over TLS, `jti` store in Redis, `https` to the
+`application.yml` is the production configuration: TLS on the server port, the JWKS of the gateway, `jti` in memory, `https` to the
 service desk. The server does not start without these:
 
 | Variable | Meaning |
 | --- | --- |
-| `MCP_TLS_KEYSTORE`, `MCP_TLS_TRUSTSTORE`, `MCP_TLS_STORE_PASSWORD` | PKCS12 files: server certificate (CN `mcp-servicedesk`, SAN `mcp-servicedesk.internal`, usages `serverAuth` and `clientAuth`) and the internal CA |
-| `MCP_GATEWAY_JWKS_URI` | JWKS of the gateway's internal JWT (`https`) |
+| `MCP_GATEWAY_JWKS_URI` | public key set of the gateway's internal JWT: `https://<domain of the platform>/.well-known/mcp-jwks.json` |
 | `MCP_CONNECT_URL` | Portal page for connecting an account, with `{system}`; sent in `credential_required` |
 | `MCP_SERVICEDESK_URL` | Base URL of the service desk API, without query or fragment (`https` outside the `dev` profile) |
-| `MCP_GATEWAY_POLICY_DATA_URL` | Policy data of the gateway (`/internal/v1/policy-data`: scope mapping, allowed AI clients, overrides), `https` outside `dev`, fetched with this server's own certificate |
-| `MCP_INTERNAL_URL` | Address of this server in the manifest |
-| `MCP_REDIS_HOST`, `MCP_REDIS_PORT`, `MCP_REDIS_USER`, `MCP_REDIS_PASSWORD` | Redis for single-use `jti` (ACL user `mcp-servicedesk`) |
 
-Optional: `MCP_GATEWAY_TLS_NAME` (when the host in the policy data address is not a name of the gateway certificate), `MCP_SERVICEDESK_SSL_BUNDLE` (SSL bundle for the service desk, such as an internal CA), `MCP_GATEWAY_ISSUER`,
-`MCP_PORT` (`8443`) and `MCP_BIND`. `MCP_SERVICEDESK_ALLOW_PLAIN_HTTP=true` allows `http` outside `dev` and exists only for the
+Optional: `MCP_SERVICEDESK_SSL_BUNDLE` (SSL bundle for the service desk, such as an internal CA), `MCP_GATEWAY_ISSUER`,
+`MCP_TLS_CERT` and `MCP_TLS_KEY`, or `MCP_TLS_KEYSTORE` with `MCP_TLS_STORE_PASSWORD` (your own certificate; without them the server generates a
+self-signed one into `MCP_STATE_DIR`, and `MCP_PLAIN_HTTP=true` means no TLS inside the platform network), `MCP_REDIS_HOST` and the other `MCP_REDIS_*`
+(one-time `jti` in Redis instead of memory: for several instances behind a balancer, which also need the same `MCP_PAGING_CURSOR_KEY`) and `MCP_PORT` (`8443`) and `MCP_BIND`. `MCP_SERVICEDESK_ALLOW_PLAIN_HTTP=true` allows `http` outside `dev` and exists only for the
 mocks of the dev stack: the credential then travels in clear text. Defaults and property names are in the
 [server environment reference](https://github.com/aiwcorpo/mcp-docs/blob/main/docs/reference/env-servers.md)
 (`docs/reference/env-servers.md` in `mcp-docs`). The MCP endpoint is `/mcp`; without a JWT only `/actuator/health` answers.
@@ -165,8 +163,8 @@ There are no variables for allowed queues or for the credential mode. Queues com
 The server is one jar or one image. For a VM with systemd the jar `mcp-app/target/mcp-servicedesk.jar` and the environment template `deploy/systemd/mcp-servicedesk.env.template` are installed as in `deploy/README.md`; the [VM installation guide](https://github.com/aiwcorpo/mcp-docs/blob/main/docs/operator/install-vm.md) in `mcp-docs` has the steps. For a
 container run `docker build -t mcp-servicedesk:<tag> .` after `./mvnw verify` (image `eclipse-temurin:25-jre` on glibc, because
 `cedar-java` loads a native library; user `mcp`, port 8443). `deploy/README.md` has the Compose install and the procedure that adds the system in the broker and the server in the gateway
-(and removes them) without restarting anything. After an update register the fresh manifest with the gateway and approve the
-policies if they changed.
+(and removes them) without restarting anything. After an update the gateway pulls the fresh manifest, and an administrator approves the
+policies and tools if they changed.
 Operating notes, upgrades and troubleshooting are in `mcp-docs`.
 
 ## Run locally without the platform
@@ -183,13 +181,13 @@ curl -s -o /dev/null -w '%{http_code}\n' -X POST -H 'Content-Type: application/j
 ```
 
 For a run on the policies of this working tree, `.run/` has IntelliJ configurations: `LocalGateway` (the gateway of
-`mcp-platform-test`, with the service account as credential type, serving the JWKS and the policy data on port 18445 with the mapping in
+`mcp-platform-test`, with the service account as credential type, serving the JWKS on port 18445 and pushing the policy data to the server with the mapping in
 `.run/scope-mapping.json`) and `McpServicedesk (dev, behind LocalGateway)`. Restart `LocalGateway` after a change to the policies.
 
 The `dev` profile accepts JWTs signed with the published test keys of the contracts and needs no client certificate. For that
 reason it listens on loopback only, and the starter refuses to start `dev` on another address. Never enable it on a host or in a
 container that the gateway connects to, and never put `SPRING_PROFILES_ACTIVE=dev` into an `.env` file, a systemd unit or an
-image. The local dev stack is not public yet; to run the platform with mTLS use the Compose install in `mcp-docs` (`examples/compose`).
+image. The local dev stack is not public yet; to run the platform use the Compose install in `mcp-docs` (`examples/compose`).
 
 ## Documentation
 
