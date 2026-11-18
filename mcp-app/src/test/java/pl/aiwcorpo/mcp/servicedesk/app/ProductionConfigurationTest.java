@@ -5,18 +5,25 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
+import org.apache.catalina.util.ServerInfo;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.support.DefaultListableBeanFactory;
 import org.springframework.boot.env.YamlPropertySourceLoader;
 import org.springframework.boot.ssl.SslBundles;
 import org.springframework.core.env.PropertySource;
+import org.springframework.core.SpringVersion;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.mock.env.MockEnvironment;
 import pl.aiwcorpo.mcp.servicedesk.integration.ServicedeskApiProperties;
 import pl.aiwcorpo.mcp.servicedesk.integration.ServicedeskBackendProperties;
 import pl.aiwcorpo.mcp.servicedesk.integration.ServicedeskResourceAdapter;
+import tools.jackson.core.Version;
+import tools.jackson.core.json.PackageVersion;
 
 /** What the production configuration must keep, checked without starting a server. */
 class ProductionConfigurationTest {
@@ -91,6 +98,42 @@ class ProductionConfigurationTest {
         Map<String, Object> dev = (Map<String, Object>) new YamlPropertySourceLoader()
                 .load("application-dev.yml", new ClassPathResource("application-dev.yml")).getFirst().getSource();
         assertThat(String.valueOf(dev.get("server.address"))).isEqualTo("127.0.0.1");
+    }
+
+    @Test
+    void theEmbeddedTomcatAndJacksonIncludeTheirSecurityFixes() {
+        // The Boot parent stays on the starter's version, so the pom overrides these two; a parent bump must not lower them.
+        int[] tomcat = Arrays.stream(ServerInfo.getServerNumber().split("\\.")).mapToInt(Integer::parseInt).toArray();
+        assertThat(Arrays.compare(tomcat, new int[] {11, 0, 27})).as("Tomcat %s", ServerInfo.getServerNumber()).isNotNegative();
+        assertThat(PackageVersion.VERSION).isGreaterThanOrEqualTo(new Version(3, 1, 7, null, null, null));
+    }
+
+    @Test
+    void theOtherRuntimeLibrariesIncludeTheirSecurityFixes() throws IOException {
+        assertAtLeast("spring-core", SpringVersion.getVersion(), "7.0.10");
+        assertAtLeast("jackson-core 2", mavenVersion("com.fasterxml.jackson.core", "jackson-core"), "2.21.7");
+        assertAtLeast("netty-common", mavenVersion("io.netty", "netty-common"), "4.2.19");
+        assertAtLeast("log4j-api", mavenVersion("org.apache.logging.log4j", "log4j-api"), "2.25.5");
+        assertAtLeast("guava", mavenVersion("com.google.guava", "guava"), "33.7.2");
+    }
+
+    private static String mavenVersion(String groupId, String artifactId) throws IOException {
+        String resource = "META-INF/maven/" + groupId + "/" + artifactId + "/pom.properties";
+        try (InputStream in = ProductionConfigurationTest.class.getClassLoader().getResourceAsStream(resource)) {
+            assertThat(in).as(resource).isNotNull();
+            Properties properties = new Properties();
+            properties.load(in);
+            return properties.getProperty("version");
+        }
+    }
+
+    private static void assertAtLeast(String library, String actual, String minimum) {
+        assertThat(Arrays.compare(versionNumbers(actual), versionNumbers(minimum))).as("%s %s", library, actual)
+                .isNotNegative();
+    }
+
+    private static int[] versionNumbers(String version) {
+        return Arrays.stream(version.split("[^0-9]+")).filter(part -> !part.isEmpty()).mapToInt(Integer::parseInt).toArray();
     }
 
     private static ServicedeskResourceAdapter adapter(String baseUrl, MockEnvironment environment) {
