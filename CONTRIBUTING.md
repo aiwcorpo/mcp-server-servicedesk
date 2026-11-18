@@ -14,7 +14,7 @@ needed: the tests run the whole server against a stub backend.
 ./mvnw -B verify     # the same command runs in CI
 ```
 
-`./mvnw -B verify` must pass before a merge. A new tool needs the items of the [tool guide](https://github.com/aiwcorpo/mcp-docs/blob/main/docs/developer/tools.md) in `mcp-docs`: risk, title,
+`./mvnw -B verify` must pass before a merge. A new tool needs the items of the [tool guide](https://mcp.aiwcorpo.pl/2.0/developers/guides/server-from-template/#write-a-tool): risk, title,
 `@ResourceRef` for every id it names, a closed argument schema, a negative test, and a row in the tools table of the README.
 
 ## Policies

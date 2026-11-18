@@ -16,7 +16,7 @@ to forge the attribution line of a note, and any path by which the service-accou
 In scope: the code of this repository. Out of scope: the platform library (`mcp-starter-lib`), the gateway, the credential
 broker and the policies, which are separate repositories with their own policies; the service desk product itself.
 
-The invariants of the platform are described in the security section of [`mcp-docs`](https://github.com/aiwcorpo/mcp-docs/tree/main/docs/security).
+The invariants of the platform are described in the [security page](https://mcp.aiwcorpo.pl/2.0/admin/security/) of the documentation.
 
 ## Supported versions
 
