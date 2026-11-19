@@ -12,7 +12,7 @@ name: mcp-servicedesk
 
 services:
   mcp-servicedesk:
-    image: ${MCP_REGISTRY:-ghcr.io/aiwcorpo}/mcp-server-servicedesk:${MCP_SERVICEDESK_VERSION:-2.0.0}
+    image: ${MCP_REGISTRY:-ghcr.io/aiwcorpo}/mcp-server-servicedesk:${MCP_SERVICEDESK_VERSION:-2.0.1}
     build:
       context: ..
       dockerfile: Dockerfile
