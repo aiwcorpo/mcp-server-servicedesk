@@ -2,6 +2,18 @@
 
 Versions follow SemVer, newest first.
 
+## 2.0.1 - 2026-11-19
+
+Patch release: built on `mcp-platform-starter` 4.1.0 and `mcp-contracts` 7.2.0, with newer Tomcat, Jackson, Spring, Netty, Log4j and Guava.
+The tools, the policies and the configuration are unchanged since 2.0.0.
+
+- Moved to `mcp-platform-starter` 4.1.0 (Spring Boot 4.1.0 as before; `mcp-contracts` 7.2.0 comes with the platform BOM).
+- Raised Tomcat, Jackson, Spring Framework, Netty, Log4j and Guava above the versions that the Spring Boot 4.1.0 parent manages, with a
+  test that keeps them from falling back (L-05).
+- The release workflow refuses to publish a version whose GitHub Release or image already exists (L-02).
+- The Maven cache of merge-request pipelines is separate from the cache of the main branch (L-03).
+- Documentation: the release settings in CONTRIBUTING (L-01), links to the published documentation site, `AGENTS.md` for coding agents.
+
 ## 2.0.0
 
 Major release: the policies of the server live in this repository. Built on `mcp-platform-starter` 4.0.0 and `mcp-contracts` 7.0.0.
